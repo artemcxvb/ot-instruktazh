@@ -17,6 +17,20 @@ function ttsBind(btn,segs){TTS.btn=btn;TTS.q=segs;TTS.i=0;btn.onclick=e=>{e.stop
  const t=btn.parentNode.querySelector('.ttsauto');if(t){t.classList.toggle('on',ttsAuto());t.onclick=e=>{e.stopPropagation();const v=!ttsAuto();localStorage.setItem('ot_autotts',v?'1':'0');t.classList.toggle('on',v);if(v&&!TTS.on){TTS.run++;ttsPlay()}}}
  if(ttsAuto()){TTS.run++;ttsPlay()}}
 function ttsBar(){return `<span class="ttsbar"><button class="ttsb" type="button">🔊 Прослушать</button><button class="ttsauto" type="button" title="Автоозвучка">Авто</button></span>`}
+
+/* ---- Видео-кружок (говорящая голова) ---- */
+var VID={v:null,b:null};
+function vidStop(){const v=VID.v;if(v){try{v.pause()}catch(e){}}VID.v=null;VID.b=null}
+function vidHTML(s){const q='?v='+(window.AUDIO_V||1);return `<button class="vbub" type="button" aria-label="Видео инструктора"><video playsinline webkit-playsinline preload="metadata" ${s.poster?`poster="${s.poster+q}"`:''} src="${s.video+q}"></video><svg viewBox="0 0 100 100"><circle class="vr0" cx="50" cy="50" r="48"/><circle class="vr1" cx="50" cy="50" r="48" pathLength="100"/></svg><i class="vplay">▶</i></button>`}
+function vidBind(b){const v=b.querySelector('video'),r=b.querySelector('.vr1');VID.v=v;VID.b=b;
+ const ui=()=>b.classList.toggle('playing',!v.paused&&!v.ended);
+ v.onplay=v.onpause=v.onended=ui;v.onended=()=>{ui();b.classList.add('ended')};
+ v.ontimeupdate=()=>{if(v.duration)r.style.strokeDashoffset=100-100*v.currentTime/v.duration};
+ const play=()=>{b.classList.remove('ended');if(v.ended)v.currentTime=0;const p=v.play();p&&p.catch&&p.catch(()=>ui())};
+ b.onclick=e=>{e.stopPropagation();if(v.paused||v.ended)play();else v.pause()};
+ b.addEventListener('pointerdown',e=>e.stopPropagation());
+ const t=b.parentNode.querySelector('.ttsauto');if(t){t.classList.toggle('on',ttsAuto());t.onclick=e=>{e.stopPropagation();const x=!ttsAuto();localStorage.setItem('ot_autotts',x?'1':'0');t.classList.toggle('on',x);if(x&&v.paused)play()}}
+ if(ttsAuto())play()}
 // ===== Backend (Google Apps Script). Пусто = локальный режим без сервера.
 const API_URL=window.OT_API_URL||'https://script.google.com/macros/s/AKfycbxVl-Yb2Heq_QPYGp0QUdRsK7LQVHps0avgdT4_oIbReGW73D4B-PLASC6dZozi7w5p/exec';
 const API_TOKEN='gBU-Yj7L-7h_2zGd2EXgr9Qy';
@@ -50,7 +64,7 @@ function innValid(v){if(!/^\d{12}$/.test(v))return false;const d=v.split('').map
  const k=w=>w.reduce((s,x,i)=>s+x*d[i],0)%11%10;
  return k([7,2,4,10,3,5,9,4,6,8])===d[10]&&k([3,7,2,4,10,3,5,9,4,6,8])===d[11];}
 function toTop(){const f=()=>{window.scrollTo(0,0);if(document.scrollingElement)document.scrollingElement.scrollTop=0;document.body.scrollTop=0};f();requestAnimationFrame(f);setTimeout(f,60);setTimeout(f,250)}
-function render(html,cls='screen'){ttsStop();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();app.className='';app.innerHTML=`<div class="${cls}">${html}</div>`;toTop()}
+function render(html,cls='screen'){ttsStop();vidStop();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();app.className='';app.innerHTML=`<div class="${cls}">${html}</div>`;toTop()}
 if('scrollRestoration' in history)history.scrollRestoration='manual';
 (function(){const set=()=>{if(document.body.classList.contains('signing'))return;const h=window.visualViewport?visualViewport.height:innerHeight;document.documentElement.style.setProperty('--app-h',Math.round(h)+'px')};set();addEventListener('resize',set);window.visualViewport&&visualViewport.addEventListener('resize',set)})();
 function buzz(){try{navigator.vibrate&&navigator.vibrate(12)}catch(e){}}
@@ -121,15 +135,15 @@ function chooseType(){render(`<div class="top"><button class="back" id="bk">←<
 let timer;
 function slide(dir=1){clearTimeout(timer);const s=S.slides[S.i],n=S.slides.length,read=S.i<=S.maxRead,dia=s.img&&s.img.endsWith('.png');
  const chips=(arr,k,h,ic)=>arr.length?`<div class="chiph ${k}"><b>${ic}</b>${h}</div>${arr.map((p,j)=>`<span class="chip ${k}" style="animation-delay:${.15+j*.07}s">${esc(p)}</span>`).join('')}`:'';
- render(`<div class="story" id="story"><img class="bg${dia?' dia':''}" src="img/${s.img||'conveyor.jpg'}" alt=""><div class="shade"></div>
+ render(`<div class="story${s.video?' hasvid':''}" id="story"><img class="bg${dia?' dia':''}" src="img/${s.img||'conveyor.jpg'}" alt=""><div class="shade"></div>
  <div class="segs">${S.slides.map((_,j)=>`<span class="${j<S.i||(j===S.i&&read)?'done':j===S.i?'cur':''}" style="--dur:${READ}s"><i></i></span>`).join('')}</div>
  <div class="shead">${BRAND}<button class="x" id="cls" aria-label="К выбору">✕</button></div>
- <div class="tap l" id="tl"></div><div class="tap r" id="tr"></div>
- <div class="scontent"><div class="slrow"><span class="slbl">${S.i+1}/${n} · ${esc(s.sec)}</span>${s.audio?ttsBar():''}</div><h2 class="stitle${s.pts.length+s.no.length+s.ok.length>7?' sm':''}">${esc(s.title)}</h2>
+ <div class="tap l" id="tl"></div><div class="tap r" id="tr"></div>${s.video?vidHTML(s):''}
+ <div class="scontent"><div class="slrow"><span class="slbl">${S.i+1}/${n} · ${esc(s.sec)}</span>${s.video?'<span class="ttsbar"><button class="ttsauto" type="button" title="Автовоспроизведение">Авто</button></span>':s.audio?ttsBar():''}</div><h2 class="stitle${s.pts.length+s.no.length+s.ok.length>7?' sm':''}">${esc(s.title)}</h2>
  <div class="sheet"><div class="chiprow">${chips(s.no,'no','ЗАПРЕЩЕНО','✕')}${chips(s.ok,'ok','ПРАВИЛЬНО','✓')}</div><ul>${s.pts.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>
  <div class="row"><button class="btn glass" id="prev">←</button><button class="btn" id="next" ${read?'':'disabled'}>${read?(S.i<n-1?'Далее →':'К тесту →'):'Читаем…'}</button></div>
  <div class="hint">Свайп ← → или тап по краям фото</div></div></div>`,'');
- if(s.audio)ttsBind(app.querySelector('.ttsb'),[{t:s.voice||s.title,src:s.audio,el:app.querySelector('.sheet')}]);
+ if(s.video)vidBind(app.querySelector('.vbub'));else if(s.audio)ttsBind(app.querySelector('.ttsb'),[{t:s.voice||s.title,src:s.audio,el:app.querySelector('.sheet')}]);
  const nx=$('#next');
  if(!read)timer=setTimeout(()=>{S.maxRead=Math.max(S.maxRead,S.i);nx.disabled=false;nx.textContent=S.i<n-1?'Далее →':'К тесту →'},READ*1000);
  const fwd=()=>{if(nx.disabled){nx.animate([{transform:'scale(1)'},{transform:'scale(1.05)'},{transform:'scale(1)'}],{duration:300});return}if(S.i<n-1){S.i++;slide(1)}else startTest()};
