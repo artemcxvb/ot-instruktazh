@@ -12,7 +12,7 @@ function ttsSpeak(t,run){if(!window.speechSynthesis){ttsNext(run);return}const u
 function ttsPlay(){const run=TTS.run;if(TTS.i>=TTS.q.length){const b=TTS.btn;TTS.on=false;TTS.i=0;document.querySelectorAll('.tts-hl').forEach(e=>e.classList.remove('tts-hl'));ttsUI();return}
  TTS.on=true;ttsUI();ttsMark();const s=TTS.q[TTS.i];if(!TTS.a)TTS.a=new Audio();const a=TTS.a;let done=false;
  const fb=()=>{if(done||run!==TTS.run)return;done=true;ttsSpeak(s.t,run)};
- a.onended=()=>{if(!done){done=true;ttsNext(run)}};a.onerror=fb;a.src='audio/'+ttsKey(s.t)+'.mp3?v=3';const p=a.play();p&&p.catch&&p.catch(e=>{if(e&&e.name==='NotAllowedError'){TTS.on=false;ttsUI();return}fb()})}
+ a.onended=()=>{if(!done){done=true;ttsNext(run)}};a.onerror=s.src?()=>{if(!done){done=true;TTS.on=false;ttsUI()}}:fb;a.src=s.src?s.src+'?v='+(window.AUDIO_V||1):'audio/'+ttsKey(s.t)+'.mp3';const p=a.play();p&&p.catch&&p.catch(e=>{if(e&&e.name==='NotAllowedError'){TTS.on=false;ttsUI();return}fb()})}
 function ttsBind(btn,segs){TTS.btn=btn;TTS.q=segs;TTS.i=0;btn.onclick=e=>{e.stopPropagation();TTS.btn=btn;if(TTS.on)ttsPause();else{TTS.run++;if(TTS.i>=TTS.q.length)TTS.i=0;ttsPlay()}};
  const t=btn.parentNode.querySelector('.ttsauto');if(t){t.classList.toggle('on',ttsAuto());t.onclick=e=>{e.stopPropagation();const v=!ttsAuto();localStorage.setItem('ot_autotts',v?'1':'0');t.classList.toggle('on',v);if(v&&!TTS.on){TTS.run++;ttsPlay()}}}
  if(ttsAuto()){TTS.run++;ttsPlay()}}
@@ -97,11 +97,11 @@ function slide(dir=1){clearTimeout(timer);const s=S.slides[S.i],n=S.slides.lengt
  <div class="segs">${S.slides.map((_,j)=>`<span class="${j<S.i||(j===S.i&&read)?'done':j===S.i?'cur':''}" style="--dur:${READ}s"><i></i></span>`).join('')}</div>
  <div class="shead">${BRAND}<button class="x" id="cls" aria-label="К выбору">✕</button></div>
  <div class="tap l" id="tl"></div><div class="tap r" id="tr"></div>
- <div class="scontent"><div class="slrow"><span class="slbl">${S.i+1}/${n} · ${esc(s.sec)}</span>${ttsBar()}</div><h2 class="stitle${s.pts.length+s.no.length+s.ok.length>7?' sm':''}">${esc(s.title)}</h2>
+ <div class="scontent"><div class="slrow"><span class="slbl">${S.i+1}/${n} · ${esc(s.sec)}</span>${s.audio?ttsBar():''}</div><h2 class="stitle${s.pts.length+s.no.length+s.ok.length>7?' sm':''}">${esc(s.title)}</h2>
  <div class="sheet"><div class="chiprow">${chips(s.no,'no','ЗАПРЕЩЕНО','✕')}${chips(s.ok,'ok','ПРАВИЛЬНО','✓')}</div><ul>${s.pts.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>
  <div class="row"><button class="btn glass" id="prev">←</button><button class="btn" id="next" ${read?'':'disabled'}>${read?(S.i<n-1?'Далее →':'К тесту →'):'Читаем…'}</button></div>
  <div class="hint">Свайп ← → или тап по краям фото</div></div></div>`,'');
- ttsBind(app.querySelector('.ttsb'),[{t:s.voice||[s.title,...s.no,...s.ok,...s.pts].join('. '),el:app.querySelector('.sheet')}]);
+ if(s.audio)ttsBind(app.querySelector('.ttsb'),[{t:s.voice||s.title,src:s.audio,el:app.querySelector('.sheet')}]);
  const nx=$('#next');
  if(!read)timer=setTimeout(()=>{S.maxRead=Math.max(S.maxRead,S.i);nx.disabled=false;nx.textContent=S.i<n-1?'Далее →':'К тесту →'},READ*1000);
  const fwd=()=>{if(nx.disabled){nx.animate([{transform:'scale(1)'},{transform:'scale(1.05)'},{transform:'scale(1)'}],{duration:300});return}if(S.i<n-1){S.i++;slide(1)}else startTest()};
@@ -118,13 +118,12 @@ function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Ma
 function startTest(){S.sent=false;S.qs=shuffle([...shuffle(Q_COMMON).slice(0,5),...Q_SPEC[S.type]]).map(q=>{const o=shuffle(q.a.map((t,j)=>({t,v:(q.va||[])[j]||t,r:j===q.c})));return{...q,a:o.map(x=>x.t),va:o.map(x=>x.v),c:o.findIndex(x=>x.r)}});S.ans=Array(10).fill(null);S.qi=0;const at=getAtt(S.inn,S.type);if(at.blocked){blocked(S.type);return}S.tries=at.n+1;question()}
 function question(){const i=S.qi,q=S.qs[i];
  render(`<div class="qhead"><div class="top"><button class="back" id="bk">←</button><div class="qn" style="margin-left:6px">Вопрос ${i+1} из 10</div><div style="margin-left:auto;font-weight:800;color:var(--m);font-size:14px">Попытка ${S.tries} из ${MAXA}<br><span style="color:#E05A00">Осталось пересдач: ${MAXA-S.tries}</span></div></div>
- <div class="qbar">${S.qs.map((_,j)=>`<span class="${j<=i?'on':''}"></span>`).join('')}</div></div><div class="pad" style="padding-top:4px">${ttsBar()}<div class="qq">${esc(q.q)}</div>
+ <div class="qbar">${S.qs.map((_,j)=>`<span class="${j<=i?'on':''}"></span>`).join('')}</div></div><div class="pad" style="padding-top:4px"><div class="qq">${esc(q.q)}</div>
  <div>${q.a.map((a,j)=>`<button class="opt${S.ans[i]===j?' sel':''}" data-a="${j}"><span class="k">${'АБВГ'[j]}</span>${esc(a)}</button>`).join('')}</div>
  <div class="dock"><button class="btn" id="qn" ${S.ans[i]===null?'disabled':''}>${i<9?'Следующий вопрос →':'Проверить ответы'}</button></div></div>`);
  $('#bk').onclick=()=>{if(i>0){S.qi--;question()}else{S.i=S.slides.length-1;slide(-1)}};
  app.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{S.ans[i]=+o.dataset.a;app.querySelectorAll('.opt').forEach(x=>x.classList.toggle('sel',x===o));$('#qn').disabled=false});
  $('#qn').onclick=()=>{if(i<9){S.qi++;question()}else check()};
- {const os=app.querySelectorAll('.opt'),sg=[{t:q.vq||q.q,el:app.querySelector('.qq')}];q.a.forEach((t,j)=>sg.push({t:'Вариант '+'АБВГ'[j]+' — '+q.va[j],el:os[j]}));ttsBind(app.querySelector('.ttsb'),sg)}
 }
 function check(){if(API_URL&&!S.sent)return checkSrv();S.sent=false;S.score=S.qs.filter((q,i)=>S.ans[i]===q.c).length;const pass=S.score>=PASS;const at=getAtt(S.inn,S.type);at.n=S.tries;at.best=Math.max(at.best||0,S.score*10);at.fio=S.fio;at.phone=S.phone;at.type=TYPES[S.type].name;at.date=new Date().toISOString();
  if(pass)delAtt(S.inn,S.type);else{if(at.n>=MAXA)at.blocked=true;setAtt(S.inn,S.type,at)}const left=MAXA-S.tries,blk=!pass&&left<=0;
