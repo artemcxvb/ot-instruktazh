@@ -172,3 +172,14 @@ input,textarea,select{font-size:16px!important;scroll-margin:120px}
 .csheet{background:#fff;width:100%;max-width:520px;max-height:88vh;max-height:calc(var(--app-h,100dvh) - 40px);border-radius:28px 28px 0 0;padding:20px 20px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;position:relative}
 .ctext{overflow-y:auto;flex:1;min-height:0;font-size:14px;line-height:1.5;color:#3A424D;padding-right:4px}.ctext h2{font-size:21px;margin:4px 40px 10px 0;color:var(--t)}.ctext h3{font-size:14.5px;margin:14px 0 4px;color:var(--t)}.ctext p{margin:0 0 8px}.cv{color:var(--m);font-size:12px}
 .x2{position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:50%;border:0;background:#EEF0F3;font-size:15px;cursor:pointer}
+/* unified background: full-bleed hero + overlapping form */
+html{background:var(--bg);min-height:100%}body{min-height:100vh;min-height:100dvh;background:var(--bg)}
+.hero{width:100vw;margin-left:calc(50% - 50vw);border-radius:0}
+.hero .in{left:max(22px,calc(50vw - 238px));right:max(22px,calc(50vw - 238px));bottom:58px}
+.hero:after{background:linear-gradient(180deg,rgba(0,0,0,.35) 0%,rgba(0,0,0,0) 30%,rgba(11,11,18,.92) 88%,rgba(11,11,18,.96) 100%)}
+.hero+.pad{position:relative;z-index:3;margin-top:-36px;padding-top:0}
+.hero+.pad .form{margin:0;padding-top:12px;box-shadow:0 -10px 40px -18px rgba(0,0,0,.35),0 20px 50px -20px rgba(11,11,18,.18)}
+.story{max-width:none}
+body.kbopen .hero .in{bottom:48px}
+.hero{min-height:340px}
+@media (max-height:600px){.hero{min-height:330px}.hero .in{bottom:52px}}
