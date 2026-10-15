@@ -134,3 +134,18 @@ main.wide{max-width:1100px}.adm{overflow-x:auto;border-radius:24px;background:#f
 body.kbopen .hero{height:150px;min-height:150px}body.kbopen .hero p,body.kbopen .hero .chips{display:none}body.kbopen .mega{font-size:26px;margin:0}
 body.kbopen .pad{padding-bottom:60vh}body.kbopen .dock,body.kbopen .nav{position:static}
 input,textarea,select{font-size:16px!important;scroll-margin:120px}
+
+/* viewport fit */
+.story,.cam{top:0;bottom:auto;height:100vh;height:100dvh;height:var(--app-h,100dvh)}
+.story .scontent{top:22%;bottom:0;padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+.story .slbl,.story .stitle,.story .row,.story .hint{flex:none}
+.story .sheet{flex:0 1 auto;min-height:0;max-height:none}
+.qhead{position:sticky;top:0;z-index:6;background:rgba(244,245,248,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);padding-bottom:2px}
+.qhead .top{padding-top:calc(10px + env(safe-area-inset-top))}.qhead .qbar{margin:10px 20px 8px}
+.qq{font-size:24px;margin:10px 0 18px}
+.pad{padding-bottom:calc(40px + env(safe-area-inset-bottom))}
+.cert-pad{padding-top:calc(16px + env(safe-area-inset-top))}
+.hero{min-height:300px}
+@media (max-height:700px){.story .scontent{top:12%}.stitle{font-size:28px;margin-bottom:8px}.stitle.sm{font-size:23px}.story .hint{display:none}.story .row{margin-top:8px}.story .btn{padding:15px}
+ .sheet li{padding:7px 0 7px 24px;font-size:14.5px}.sheet li:before{top:13px}.qq{font-size:21px}.opt{padding:15px 16px;margin-bottom:9px}.hero{height:44svh;min-height:260px}.mega{font-size:36px}.segs{top:8px}.shead{top:18px}.shead .brand i{width:32px;height:32px}}
+@media (max-height:600px){.story .scontent{top:11%}.story .shead .brand span{display:none}.story .chip{padding:6px 10px;font-size:13px;margin:4px 0}.story .chiph{margin:6px 0 3px}}

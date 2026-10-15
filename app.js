@@ -7,7 +7,10 @@ let S;function reset(){S={photo:null,photoAt:null,fio:'',inn:'',phone:'',type:nu
 function innValid(v){if(!/^\d{12}$/.test(v))return false;const d=v.split('').map(Number);
  const k=w=>w.reduce((s,x,i)=>s+x*d[i],0)%11%10;
  return k([7,2,4,10,3,5,9,4,6,8])===d[10]&&k([3,7,2,4,10,3,5,9,4,6,8])===d[11];}
-function render(html,cls='screen'){app.className='';app.innerHTML=`<div class="${cls}">${html}</div>`;window.scrollTo(0,0)}
+function toTop(){const f=()=>{window.scrollTo(0,0);if(document.scrollingElement)document.scrollingElement.scrollTop=0;document.body.scrollTop=0};f();requestAnimationFrame(f);setTimeout(f,60);setTimeout(f,250)}
+function render(html,cls='screen'){if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();app.className='';app.innerHTML=`<div class="${cls}">${html}</div>`;toTop()}
+if('scrollRestoration' in history)history.scrollRestoration='manual';
+(function(){const set=()=>{const h=window.visualViewport?visualViewport.height:innerHeight;document.documentElement.style.setProperty('--app-h',Math.round(h)+'px')};set();addEventListener('resize',set);window.visualViewport&&visualViewport.addEventListener('resize',set)})();
 function buzz(){try{navigator.vibrate&&navigator.vibrate(12)}catch(e){}}
 document.addEventListener('pointerdown',e=>{if(e.target.closest('button'))buzz()});
 
@@ -62,9 +65,8 @@ function slide(dir=1){clearTimeout(timer);const s=S.slides[S.i],n=S.slides.lengt
 function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function startTest(){S.qs=shuffle([...shuffle(Q_COMMON).slice(0,5),...Q_SPEC[S.type]]).map(q=>{const o=shuffle(q.a.map((t,j)=>({t,r:j===q.c})));return{...q,a:o.map(x=>x.t),c:o.findIndex(x=>x.r)}});S.ans=Array(10).fill(null);S.qi=0;S.tries++;question()}
 function question(){const i=S.qi,q=S.qs[i];
- render(`<div class="top"><button class="back" id="bk">←</button><div style="margin-left:auto;font-weight:800;color:var(--m);font-size:14px">Попытка ${S.tries}</div></div><div class="pad" style="padding-top:4px">
- <div class="qbar">${S.qs.map((_,j)=>`<span class="${j<=i?'on':''}"></span>`).join('')}</div>
- <div class="qn">Вопрос ${i+1} из 10</div><div class="qq">${esc(q.q)}</div>
+ render(`<div class="qhead"><div class="top"><button class="back" id="bk">←</button><div class="qn" style="margin-left:6px">Вопрос ${i+1} из 10</div><div style="margin-left:auto;font-weight:800;color:var(--m);font-size:14px">Попытка ${S.tries}</div></div>
+ <div class="qbar">${S.qs.map((_,j)=>`<span class="${j<=i?'on':''}"></span>`).join('')}</div></div><div class="pad" style="padding-top:4px"><div class="qq">${esc(q.q)}</div>
  <div>${q.a.map((a,j)=>`<button class="opt${S.ans[i]===j?' sel':''}" data-a="${j}"><span class="k">${'АБВГ'[j]}</span>${esc(a)}</button>`).join('')}</div>
  <div class="dock"><button class="btn" id="qn" ${S.ans[i]===null?'disabled':''}>${i<9?'Следующий вопрос →':'Проверить ответы'}</button></div></div>`);
  $('#bk').onclick=()=>{if(i>0){S.qi--;question()}else{S.i=S.slides.length-1;slide(-1)}};
