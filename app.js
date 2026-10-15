@@ -56,26 +56,54 @@ if('scrollRestoration' in history)history.scrollRestoration='manual';
 function buzz(){try{navigator.vibrate&&navigator.vibrate(12)}catch(e){}}
 document.addEventListener('pointerdown',e=>{if(e.target.closest('button'))buzz()});
 
-function start(){render(`<div class="hero"><img src="img/conveyor.jpg" alt="">${BRAND}<div class="in">
+
+const PROF_KEY='ot_profile';
+function loadProf(){try{const p=JSON.parse(localStorage.getItem(PROF_KEY)||'null');return p&&typeof p==='object'?p:null}catch(e){return null}}
+function saveProf(p){localStorage.setItem(PROF_KEY,JSON.stringify({fio:p.fio,inn:p.inn,phone:p.phone}));localStorage.setItem('ot_last_inn',p.inn)}
+function clearProf(){localStorage.removeItem(PROF_KEY)}
+function phoneDigits(raw){const s=String(raw||'').trim();let d=s.replace(/\D/g,'');const head=s.replace(/[\s()-]/g,'');if(/^(\+?7|8)/.test(head)||(d.length===11&&(d[0]==='7'||d[0]==='8'))){if(d[0]==='7'||d[0]==='8')d=d.slice(1)}return d.slice(0,10)}
+function phoneFmt(d){d=phoneDigits(d);let o='+7';if(d.length)o+=' '+d.slice(0,Math.min(3,d.length));if(d.length>3)o+=' '+d.slice(3,Math.min(6,d.length));if(d.length>6)o+='-'+d.slice(6,Math.min(8,d.length));if(d.length>8)o+='-'+d.slice(8,10);return d.length?o:'+7 '}
+function phoneE164(d){d=phoneDigits(d);return d.length===10?'+7'+d:''}
+function bindPhone(el,init){const PREFIX='+7 ';let digits=phoneDigits(init||'');
+ const paint=(caret)=>{el.value=phoneFmt(digits);const min=PREFIX.length,pos=caret==null?el.value.length:Math.max(min,Math.min(caret,el.value.length));try{el.setSelectionRange(pos,pos)}catch(e){}};
+ const caretAfterDigits=n=>{let seen=0,i=PREFIX.length;const v=phoneFmt(digits);for(;i<v.length;i++){if(/\d/.test(v[i])){seen++;if(seen>=n)return i+1}}return v.length};
+ paint();
+ el.addEventListener('focus',()=>{if(!digits.length)paint();requestAnimationFrame(()=>{const min=PREFIX.length;if((el.selectionStart||0)<min)try{el.setSelectionRange(el.value.length,el.value.length)}catch(e){}})});
+ el.addEventListener('click',()=>{const min=PREFIX.length;if((el.selectionStart||0)<min||(el.selectionEnd||0)<min)try{el.setSelectionRange(min,Math.max(min,el.selectionEnd||min))}catch(e){}});
+ el.addEventListener('keydown',e=>{const min=PREFIX.length,s=el.selectionStart||0,en=el.selectionEnd||0;
+  if(e.key==='Backspace'){e.preventDefault();if(s===en){if(s<=min)return;const before=phoneDigits(el.value.slice(0,s));digits=(before.slice(0,-1)+phoneDigits(el.value.slice(en))).slice(0,10);paint(caretAfterDigits(before.length-1))}else{const a=phoneDigits(el.value.slice(0,Math.max(s,min))),b=phoneDigits(el.value.slice(Math.max(en,min)));digits=(a+b).slice(0,10);paint(caretAfterDigits(a.length))}return}
+  if(e.key==='Delete'){e.preventDefault();if(s===en){if(s<min){try{el.setSelectionRange(min,min)}catch(x){}return}const before=phoneDigits(el.value.slice(0,s)),after=phoneDigits(el.value.slice(en));digits=(before+after.slice(1)).slice(0,10);paint(caretAfterDigits(before.length))}else{const a=phoneDigits(el.value.slice(0,Math.max(s,min))),b=phoneDigits(el.value.slice(Math.max(en,min)));digits=(a+b).slice(0,10);paint(caretAfterDigits(a.length))}return}
+  if(e.key==='ArrowLeft'||e.key==='Home'){requestAnimationFrame(()=>{if((el.selectionStart||0)<min)try{el.setSelectionRange(min,min)}catch(x){}})}
+  if(e.key==='a'&&(e.metaKey||e.ctrlKey)){e.preventDefault();try{el.setSelectionRange(min,el.value.length)}catch(x){}}});
+ el.addEventListener('paste',e=>{e.preventDefault();const t=(e.clipboardData||window.clipboardData).getData('text')||'';digits=phoneDigits(t);paint()});
+ el.addEventListener('input',()=>{const cur=el.selectionStart||0;const before=phoneDigits(el.value.slice(0,cur));digits=phoneDigits(el.value);paint(caretAfterDigits(before.length))});
+ return{digits:()=>digits,e164:()=>phoneE164(digits),set(v){digits=phoneDigits(v);paint()}}}
+function applyProf(){const p=loadProf();if(!p)return;if(p.fio)S.fio=p.fio;if(p.inn)S.inn=p.inn;if(p.phone)S.phone=p.phone}
+
+function start(){applyProf();const saved=loadProf();
+ render(`<div class="hero"><img src="img/conveyor.jpg" alt="">${BRAND}<div class="in">
  <h1 class="mega">Безопасность<br><em>начинается с тебя</em></h1>
  <p>Инструктаж для исполнителей (самозанятых) ООО «Персональное Решение» на складе «Лемана ПРО».</p>
  <div class="chips"><span>⏱ ~15 минут</span><span>📝 10 вопросов</span><span>✍️ Подпись</span></div></div></div>
- <div class="pad"><div class="form"><label>ФИО</label><input type="text" id="fio" autocomplete="name" autocapitalize="words" enterkeyhint="next" placeholder="Иванов Иван Иванович" value="${esc(S.fio)}"><div class="err" id="e1"></div>
+ <div class="pad"><div class="form">${saved?`<div class="whoami" id="whoami">Вход как <b>${esc(saved.fio||'исполнитель')}</b> · <a href="#" id="clr">Не вы? Очистить</a></div>`:''}
+ <label>ФИО</label><input type="text" id="fio" autocomplete="name" autocapitalize="words" enterkeyhint="next" placeholder="Иванов Иван Иванович" value="${esc(S.fio)}"><div class="err" id="e1"></div>
  <label>ИНН · 12 цифр</label><input type="text" id="inn" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="next" maxlength="12" placeholder="000000000000" value="${esc(S.inn)}"><div class="err" id="e2"></div>
- <label>Телефон</label><input type="tel" id="phone" inputmode="tel" autocomplete="tel" enterkeyhint="done" placeholder="+7 900 000-00-00" value="${esc(S.phone)}"><div class="err" id="e3"></div>
+ <label>Телефон</label><input type="tel" id="phone" inputmode="tel" autocomplete="tel" enterkeyhint="done" maxlength="18" placeholder="+7 900 000-00-00" value="${esc(phoneFmt(S.phone||''))}"><div class="err" id="e3"></div>
  <label class="chk cns"><input type="checkbox" id="pdn"><span>Даю согласие на обработку персональных данных на условиях <a href="#" id="cnsopen">текста согласия</a></span></label>
  <label class="chk cns"><input type="checkbox" id="phc"><span>Даю согласие на фотосъёмку и использование моего изображения для подтверждения личности</span></label><div class="err" id="e4"></div>
  <button class="btn" id="go">Начать инструктаж →</button></div></div>`);
+ const ph=bindPhone($('#phone'),S.phone||'');
  ['fio','inn','phone'].forEach((id,k,a)=>$('#'+id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();k<2?$('#'+a[k+1]).focus():$('#go').click()}}));
  $('#cnsopen').onclick=e=>{e.preventDefault();consentModal()};
  $('#inn').oninput=e=>e.target.value=e.target.value.replace(/\D/g,'').slice(0,12);
- $('#go').onclick=()=>{const fio=$('#fio').value.trim().replace(/\s+/g,' '),inn=$('#inn').value,ph=$('#phone').value.trim();let ok=true;
+ const clr=$('#clr');if(clr)clr.onclick=e=>{e.preventDefault();clearProf();S.fio='';S.inn='';S.phone='';$('#fio').value='';$('#inn').value='';ph.set('');const w=$('#whoami');if(w)w.remove()};
+ $('#go').onclick=()=>{const fio=$('#fio').value.trim().replace(/\s+/g,' '),inn=$('#inn').value,e164=ph.e164();let ok=true;
   $('#e1').textContent=fio.split(' ').length<2||!/^[А-Яа-яЁёA-Za-z\- ]+$/.test(fio)?(ok=false,'Укажите фамилию и имя (и отчество при наличии)'):'';
   $('#e2').textContent=!/^\d{12}$/.test(inn)?(ok=false,'ИНН физического лица — ровно 12 цифр'):!innValid(inn)?(ok=false,'Неверная контрольная сумма ИНН — проверьте цифры'):'';
-  const pd=ph.replace(/\D/g,'');$('#e3').textContent=!(pd.length===11&&/^[78]/.test(pd))&&!(pd.length===10)?(ok=false,'Введите номер в формате +7XXXXXXXXXX'):'';
+  $('#e3').textContent=!e164?(ok=false,'Введите 10 цифр после +7'):'';
   $('#e4').textContent=!$('#pdn').checked||!$('#phc').checked?(ok=false,'Необходимо дать оба согласия — без них инструктаж пройти нельзя'):'';
   if(!ok){$('.form').classList.remove('shake');void $('.form').offsetWidth;$('.form').classList.add('shake');return}
-  S.fio=fio;S.inn=inn;S.phone='+7'+pd.slice(-10);S.consent={v:CONSENT_V,at:new Date().toISOString(),pdn:true,photo:true};localStorage.setItem('ot_consent_'+inn,JSON.stringify(S.consent));localStorage.setItem('ot_last_inn',inn);
+  S.fio=fio;S.inn=inn;S.phone=e164;S.consent={v:CONSENT_V,at:new Date().toISOString(),pdn:true,photo:true};localStorage.setItem('ot_consent_'+inn,JSON.stringify(S.consent));saveProf({fio,inn,phone:e164});
   if(API_URL){const g=$('#go');g.disabled=true;g.textContent='Проверяем…';
    let box=$('#go-prog');if(!box){box=document.createElement('div');box.id='go-prog';g.insertAdjacentElement('afterend',box)}
    box.innerHTML=progHTML('Проверяем допуск…','inline sm');const pg=startProg(box,{expect:40000});
