@@ -33,7 +33,7 @@ function innValid(v){if(!/^\d{12}$/.test(v))return false;const d=v.split('').map
 function toTop(){const f=()=>{window.scrollTo(0,0);if(document.scrollingElement)document.scrollingElement.scrollTop=0;document.body.scrollTop=0};f();requestAnimationFrame(f);setTimeout(f,60);setTimeout(f,250)}
 function render(html,cls='screen'){if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();app.className='';app.innerHTML=`<div class="${cls}">${html}</div>`;toTop()}
 if('scrollRestoration' in history)history.scrollRestoration='manual';
-(function(){const set=()=>{const h=window.visualViewport?visualViewport.height:innerHeight;document.documentElement.style.setProperty('--app-h',Math.round(h)+'px')};set();addEventListener('resize',set);window.visualViewport&&visualViewport.addEventListener('resize',set)})();
+(function(){const set=()=>{if(document.body.classList.contains('signing'))return;const h=window.visualViewport?visualViewport.height:innerHeight;document.documentElement.style.setProperty('--app-h',Math.round(h)+'px')};set();addEventListener('resize',set);window.visualViewport&&visualViewport.addEventListener('resize',set)})();
 function buzz(){try{navigator.vibrate&&navigator.vibrate(12)}catch(e){}}
 document.addEventListener('pointerdown',e=>{if(e.target.closest('button'))buzz()});
 
@@ -121,18 +121,33 @@ function sign(){render(`<div class="top"><button class="back" id="bk">←</butto
  <p class="sub">${esc(S.fio)} · ИНН ${S.inn}<br>${esc(TYPES[S.type].name)}</p>
  <div class="card"><label class="chk"><input type="checkbox" id="agree"><span>Ознакомлен(а) с Правилами техники безопасности и обязуюсь соблюдать</span></label></div>
  <div class="card"><b style="font-size:17px">Фото исполнителя</b><div class="sub" style="margin:4px 0 0;font-size:13px">Селфи с фронтальной камеры для подтверждения личности</div><div id="selfie"></div></div>
- <div class="card"><div style="display:flex;align-items:center"><b style="font-size:17px">Подпись пальцем</b><button class="btn ghost" id="clr" style="margin:0 0 0 auto;width:auto;padding:10px 16px;font-size:14px">Очистить</button></div><canvas id="sig"></canvas></div>
+ <div class="card"><div style="display:flex;align-items:center"><b style="font-size:17px">Подпись пальцем</b><button class="btn ghost" id="clr" style="margin:0 0 0 auto;width:auto;padding:10px 16px;font-size:14px">Очистить</button></div><canvas id="sig"></canvas><div class="sighint" id="sighint">Распишитесь пальцем в поле выше</div></div>
  <button class="btn" id="done" disabled>Подписать</button></div>`);
- $('#bk').onclick=check;
- const c=$('#sig'),r=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1;c.width=r.width*dpr;c.height=r.height*dpr;
- const x=c.getContext('2d');x.scale(dpr,dpr);x.lineWidth=2.8;x.lineCap='round';x.lineJoin='round';x.strokeStyle='#0B0B12';let dr=false,len=0;
+ $('#bk').onclick=()=>{unlock();check()};
+ const c=$('#sig'),hint=$('#sighint'),dpr=()=>window.devicePixelRatio||1;
+ const x=c.getContext('2d');let dr=false,len=0,cssW=0,cssH=0,raf=0,pending=null,lockY=0;
+ const lock=()=>{if(document.body.classList.contains('signing'))return;lockY=window.scrollY||document.documentElement.scrollTop||0;document.documentElement.classList.add('signing');document.body.classList.add('signing')};
+ const unlock=()=>{if(!document.body.classList.contains('signing'))return;document.documentElement.classList.remove('signing');document.body.classList.remove('signing');window.scrollTo(0,lockY)};
+ const styleStroke=()=>{x.setTransform(1,0,0,1,0,0);x.scale(dpr(),dpr());x.lineWidth=2.8;x.lineCap='round';x.lineJoin='round';x.strokeStyle='#0B0B12'};
+ const fit=(force)=>{if(dr&&!force)return;const r=c.getBoundingClientRect(),w=Math.round(r.width),h=Math.round(r.height);if(!w||!h)return;if(!force&&w===cssW&&h===cssH)return;
+  const prev=(cssW&&c.width)?c.toDataURL('image/png'):null;cssW=w;cssH=h;c.width=Math.round(w*dpr());c.height=Math.round(h*dpr());styleStroke();
+  if(prev){const img=new Image();img.onload=()=>{x.setTransform(1,0,0,1,0,0);x.drawImage(img,0,0,c.width,c.height);styleStroke()};img.src=prev}};
+ fit(true);
  const pt=e=>{const b=c.getBoundingClientRect();return[e.clientX-b.left,e.clientY-b.top]};
- c.onpointerdown=e=>{dr=true;c.setPointerCapture(e.pointerId);x.beginPath();x.moveTo(...pt(e))};
- c.onpointermove=e=>{if(!dr)return;x.lineTo(...pt(e));x.stroke();len++;upd()};
- c.onpointerup=c.onpointercancel=()=>dr=false;
- const done=$('#done'),upd=()=>done.disabled=!($('#agree').checked&&len>10&&S.photo);S.upd=upd;drawSelfie();
- $('#clr').onclick=()=>{x.clearRect(0,0,c.width,c.height);len=0;upd()};$('#agree').onchange=upd;
- done.onclick=()=>{S.sig=c.toDataURL('image/png');finish()};done.insertAdjacentHTML('afterend','<div class="err" id="serr" style="text-align:center"></div>');
+ const flush=()=>{raf=0;if(!pending||pending.length<2){pending=null;return}x.beginPath();x.moveTo(pending[0],pending[1]);for(let i=2;i<pending.length;i+=2)x.lineTo(pending[i],pending[i+1]);x.stroke();pending=null};
+ const queue=(a,b)=>{if(!pending)pending=[a,b];else{pending.push(a,b)}if(!raf)raf=requestAnimationFrame(flush)};
+ const onDown=e=>{if(e.button!=null&&e.button!==0)return;e.preventDefault();dr=true;lock();try{c.setPointerCapture(e.pointerId)}catch(_){}
+  const[a,b]=pt(e);pending=null;if(raf){cancelAnimationFrame(raf);raf=0}x.beginPath();x.moveTo(a,b);queue(a,b);len++;upd()};
+ const onMove=e=>{if(!dr)return;e.preventDefault();const[a,b]=pt(e);queue(a,b);len++;upd()};
+ const onUp=e=>{if(!dr)return;e&&e.preventDefault&&e.preventDefault();dr=false;if(raf){cancelAnimationFrame(raf);raf=0}flush();unlock();try{e&&e.pointerId!=null&&c.releasePointerCapture(e.pointerId)}catch(_){};upd()};
+ c.addEventListener('pointerdown',onDown);c.addEventListener('pointermove',onMove);c.addEventListener('pointerup',onUp);c.addEventListener('pointercancel',onUp);c.addEventListener('lostpointercapture',onUp);
+ // iOS Safari: touch listeners must be non-passive to stop page scroll under the finger
+ const pe=e=>{e.preventDefault()};c.addEventListener('touchstart',pe,{passive:false});c.addEventListener('touchmove',pe,{passive:false});
+ const onResize=()=>{if(dr)return;fit(false)};addEventListener('resize',onResize);window.visualViewport&&visualViewport.addEventListener('resize',onResize);
+ const done=$('#done'),upd=()=>{done.disabled=!($('#agree').checked&&len>10&&S.photo);hint.textContent=len>10?'Подпись принята — можно подписать':(len>0?'Продолжайте расписываться':'Распишитесь пальцем в поле выше')};S.upd=upd;drawSelfie();
+ $('#clr').onclick=()=>{if(raf){cancelAnimationFrame(raf);raf=0}pending=null;x.setTransform(1,0,0,1,0,0);x.clearRect(0,0,c.width,c.height);styleStroke();len=0;upd()};$('#agree').onchange=upd;
+ done.onclick=()=>{unlock();S.sig=c.toDataURL('image/png');finish()};done.insertAdjacentHTML('afterend','<div class="err" id="serr" style="text-align:center"></div>');
+ window.__sigPad={fit,isDrawing:()=>dr,len:()=>len,unlock,cssSize:()=>({w:cssW,h:cssH})};
 }
 async function finish(){const d=new Date();S.recId=S.recId||Date.now().toString(36).toUpperCase();let id=S.recId;
  if(API_URL){const b=$('#done'),er=$('#serr');b.disabled=true;b.textContent='Сохраняем…';er.innerHTML='';
