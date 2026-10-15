@@ -1,5 +1,5 @@
 // ===== Backend (Google Apps Script). Пусто = локальный режим без сервера.
-const API_URL=window.OT_API_URL||'';
+const API_URL=window.OT_API_URL||'https://script.google.com/macros/s/AKfycbxBH80GroIIMJPRkxvhI4cIl_dhnAoGx5IMZ14z4kiVNtRnW2ogMuO6V91nKrIMJxjJ/exec';
 const API_TOKEN='gBU-Yj7L-7h_2zGd2EXgr9Qy';
 const SHEET_URL='https://docs.google.com/spreadsheets/d/17OdCnBHpzfZOEjSBPVcRiiO3-YCbVijOL9-UIiR9KnM/edit';
 async function api(action,data){const ac=new AbortController(),t=setTimeout(()=>ac.abort(),20000);
