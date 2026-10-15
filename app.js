@@ -1,3 +1,12 @@
+// ===== Backend (Google Apps Script). Пусто = локальный режим без сервера.
+const API_URL=window.OT_API_URL||'https://script.google.com/macros/s/AKfycbxBH80GroIIMJPRkxvhI4cIl_dhnAoGx5IMZ14z4kiVNtRnW2ogMuO6V91nKrIMJxjJ/exec';
+const API_TOKEN='gBU-Yj7L-7h_2zGd2EXgr9Qy';
+const SHEET_URL='https://docs.google.com/spreadsheets/d/17OdCnBHpzfZOEjSBPVcRiiO3-YCbVijOL9-UIiR9KnM/edit';
+async function api(action,data){const ac=new AbortController(),t=setTimeout(()=>ac.abort(),20000);
+ try{const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({token:API_TOKEN,action,...data}),redirect:'follow',signal:ac.signal});
+  if(!r.ok)throw new Error('http '+r.status);return await r.json()}finally{clearTimeout(t)}}
+const NET='Нет связи, попробуйте позже';
+function syncSrv(types){S.srv=types;Object.entries(types).forEach(([k,t])=>{if(t.status==='none')delAtt(S.inn,k);else if(t.status==='passed'||t.status==='expired')delAtt(S.inn,k);else setAtt(S.inn,k,{...getAtt(S.inn,k),n:t.attempts,best:t.best,blocked:t.status==='blocked',fio:S.fio,phone:S.phone,type:TYPES[k],date:new Date().toISOString()})})}
 const $=s=>document.querySelector(s), app=$('#app');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const KEY='ot_pr_lemana_completions', READ=window.FAST?0.05:3;
@@ -33,7 +42,9 @@ function start(){render(`<div class="hero"><img src="img/conveyor.jpg" alt="">${
   const pd=ph.replace(/\D/g,'');$('#e3').textContent=!(pd.length===11&&/^[78]/.test(pd))&&!(pd.length===10)?(ok=false,'Введите номер в формате +7XXXXXXXXXX'):'';
   $('#e4').textContent=!$('#pdn').checked||!$('#phc').checked?(ok=false,'Необходимо дать оба согласия — без них инструктаж пройти нельзя'):'';
   if(!ok){$('.form').classList.remove('shake');void $('.form').offsetWidth;$('.form').classList.add('shake');return}
-  S.fio=fio;S.inn=inn;S.phone='+7'+pd.slice(-10);S.consent={v:CONSENT_V,at:new Date().toISOString(),pdn:true,photo:true};localStorage.setItem('ot_consent_'+inn,JSON.stringify(S.consent));localStorage.setItem('ot_last_inn',inn);hasHist()?dashboard():chooseType();};
+  S.fio=fio;S.inn=inn;S.phone='+7'+pd.slice(-10);S.consent={v:CONSENT_V,at:new Date().toISOString(),pdn:true,photo:true};localStorage.setItem('ot_consent_'+inn,JSON.stringify(S.consent));localStorage.setItem('ot_last_inn',inn);
+  if(API_URL){const g=$('#go');g.disabled=true;g.textContent='Проверяем…';api('status',{inn}).then(r=>{if(!r.ok)throw new Error(r.error);syncSrv(r.types);hasHist()?dashboard():chooseType()}).catch(()=>{g.disabled=false;g.textContent='Начать инструктаж →';$('#e3').textContent=NET})}
+  else hasHist()?dashboard():chooseType();};
 }
 function chooseType(){render(`<div class="top"><button class="back" id="bk">←</button></div><div class="pad" style="padding-top:8px">
  <h1>Какой вид<br>услуг?</h1><p class="sub">Инструктаж и тест подберём под вид услуг, согласованный с Заказчиком.</p>
@@ -67,7 +78,7 @@ function slide(dir=1){clearTimeout(timer);const s=S.slides[S.i],n=S.slides.lengt
  st.addEventListener('pointerup',end);st.addEventListener('pointercancel',()=>{x0=null;sc.style.transform=''});
 }
 function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-function startTest(){S.qs=shuffle([...shuffle(Q_COMMON).slice(0,5),...Q_SPEC[S.type]]).map(q=>{const o=shuffle(q.a.map((t,j)=>({t,r:j===q.c})));return{...q,a:o.map(x=>x.t),c:o.findIndex(x=>x.r)}});S.ans=Array(10).fill(null);S.qi=0;const at=getAtt(S.inn,S.type);if(at.blocked){blocked(S.type);return}S.tries=at.n+1;question()}
+function startTest(){S.sent=false;S.qs=shuffle([...shuffle(Q_COMMON).slice(0,5),...Q_SPEC[S.type]]).map(q=>{const o=shuffle(q.a.map((t,j)=>({t,r:j===q.c})));return{...q,a:o.map(x=>x.t),c:o.findIndex(x=>x.r)}});S.ans=Array(10).fill(null);S.qi=0;const at=getAtt(S.inn,S.type);if(at.blocked){blocked(S.type);return}S.tries=at.n+1;question()}
 function question(){const i=S.qi,q=S.qs[i];
  render(`<div class="qhead"><div class="top"><button class="back" id="bk">←</button><div class="qn" style="margin-left:6px">Вопрос ${i+1} из 10</div><div style="margin-left:auto;font-weight:800;color:var(--m);font-size:14px">Попытка ${S.tries} из ${MAXA}<br><span style="color:#E05A00">Осталось пересдач: ${MAXA-S.tries}</span></div></div>
  <div class="qbar">${S.qs.map((_,j)=>`<span class="${j<=i?'on':''}"></span>`).join('')}</div></div><div class="pad" style="padding-top:4px"><div class="qq">${esc(q.q)}</div>
@@ -77,7 +88,7 @@ function question(){const i=S.qi,q=S.qs[i];
  app.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{S.ans[i]=+o.dataset.a;app.querySelectorAll('.opt').forEach(x=>x.classList.toggle('sel',x===o));$('#qn').disabled=false});
  $('#qn').onclick=()=>{if(i<9){S.qi++;question()}else check()};
 }
-function check(){S.score=S.qs.filter((q,i)=>S.ans[i]===q.c).length;const pass=S.score>=PASS;const at=getAtt(S.inn,S.type);at.n=S.tries;at.best=Math.max(at.best||0,S.score*10);at.fio=S.fio;at.phone=S.phone;at.type=TYPES[S.type].name;at.date=new Date().toISOString();
+function check(){if(API_URL&&!S.sent)return checkSrv();S.sent=false;S.score=S.qs.filter((q,i)=>S.ans[i]===q.c).length;const pass=S.score>=PASS;const at=getAtt(S.inn,S.type);at.n=S.tries;at.best=Math.max(at.best||0,S.score*10);at.fio=S.fio;at.phone=S.phone;at.type=TYPES[S.type].name;at.date=new Date().toISOString();
  if(pass)delAtt(S.inn,S.type);else{if(at.n>=MAXA)at.blocked=true;setAtt(S.inn,S.type,at)}const left=MAXA-S.tries,blk=!pass&&left<=0;
  render(`<div class="pad"><div class="res ${pass?'pass':'fail'}"><div class="score">${S.score*10}%</div><div style="font-weight:800;font-size:20px;margin-top:6px">${pass?'Тест сдан! 🎉':'Пока не сдан'}</div>
  <div style="opacity:.85;margin-top:6px;font-size:14px">${S.score} из 10 правильных${pass?'':(blk?' · нужно 90% (9 из 10).':' · нужно 90% (9 из 10). Изучите пояснения и попробуйте снова.')}</div><div class="left">${pass?'':blk?'Попытки исчерпаны':'Осталось пересдач: '+left}</div></div>
@@ -104,9 +115,14 @@ function sign(){render(`<div class="top"><button class="back" id="bk">←</butto
  c.onpointerup=c.onpointercancel=()=>dr=false;
  const done=$('#done'),upd=()=>done.disabled=!($('#agree').checked&&len>10&&S.photo);S.upd=upd;drawSelfie();
  $('#clr').onclick=()=>{x.clearRect(0,0,c.width,c.height);len=0;upd()};$('#agree').onchange=upd;
- done.onclick=()=>{S.sig=c.toDataURL('image/png');finish()};
+ done.onclick=()=>{S.sig=c.toDataURL('image/png');finish()};done.insertAdjacentHTML('afterend','<div class="err" id="serr" style="text-align:center"></div>');
 }
-function finish(){const d=new Date();const rec={id:Date.now().toString(36).toUpperCase(),fio:S.fio,inn:S.inn,phone:S.phone,type:TYPES[S.type].name,date:d.toISOString(),score:S.score*10,tries:S.tries,sig:S.sig,photo:S.photo,photoAt:S.photoAt,consent:S.consent};
+async function finish(){const d=new Date();let id=Date.now().toString(36).toUpperCase();
+ if(API_URL){const b=$('#done');b.disabled=true;b.textContent='Сохраняем…';$('#serr').textContent='';
+  let r;try{r=await api('complete',{consent:S.consent,inn:S.inn,type:S.type,fio:S.fio,phone:S.phone,agree:true,photo:S.photo,photoAt:S.photoAt,sig:S.sig,recordId:id})}catch(e){r=null}
+  if(!r||!r.ok){b.disabled=false;b.textContent='Подписать';$('#serr').textContent=!r?NET:r.error==='not_passed'?'Сервер не подтвердил сдачу теста. Обратитесь к координатору Заказчика.':'Ошибка сервера: '+r.error;return}
+  id=r.recordId;if(S.srv)S.srv[S.type]={status:'passed',attempts:S.tries,best:S.score*10,passedAt:r.passedAt,validTo:r.validTo,recordId:id}}
+ const rec={id,fio:S.fio,inn:S.inn,phone:S.phone,type:TYPES[S.type].name,date:d.toISOString(),score:S.score*10,tries:S.tries,sig:S.sig,photo:S.photo,photoAt:S.photoAt,consent:S.consent};
  const all=JSON.parse(localStorage.getItem(KEY)||'[]');all.push(rec);
  try{localStorage.setItem(KEY,JSON.stringify(all))}catch(e){alert('Память браузера заполнена: запись не сохранена в журнал на этом устройстве. Сообщите координатору — нужно выгрузить CSV и очистить журнал. Подтверждение ниже можно сохранить в PDF.')}cert(rec)}
 function fmtS(iso){return new Date(iso).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
@@ -120,7 +136,7 @@ function cert(r){render(`<div class="pad"><h1 class="noprint" style="margin-top:
  <div><span class="lbl">Результат</span><span class="big">${r.score}%</span></div><div><span class="lbl">Попытка</span>${r.tries} · сдан</div>
  <div><span class="lbl">Дата и время</span>${fmt(r.date)}</div><div><span class="lbl">Фото сделано</span>${r.photoAt?fmtS(r.photoAt):'—'}</div><div><span class="lbl">№ записи</span>${r.id}</div>
  <div class="full"><span class="lbl">Объект · Заказчик</span>Склад «Лемана ПРО» · ООО «Персональное Решение»</div>
- <div class="full"><span class="lbl">Подпись</span><img class="sig" src="${r.sig}" alt="подпись"></div></div>
+ <div class="full"><span class="lbl">Подпись</span>${r.sig?`<img class="sig" src="${r.sig}" alt="подпись">`:'<span style="color:var(--m)">хранится в Google Таблице</span>'}</div></div>
  <p class="fine">Исполнитель ознакомлен с Правилами техники безопасности и правилами нахождения на объекте (приложение к договору возмездного оказания услуг) и обязуется их соблюдать. ${r.consent?`Согласие на обработку персональных данных и на использование изображения (версия ${esc(r.consent.v)}) дано ${fmtS(r.consent.at)}. `:''}Инструктаж на месте оказания услуг проводится координатором Заказчика / представителем объекта дополнительно.</p></div></div>
  <div class="noprint" style="margin-top:20px"><button class="btn" id="pdf">Скачать PDF</button><button class="btn ghost" id="mine">Моё обучение</button><button class="btn ghost" id="again">Выйти</button></div>
  ${recBlock(r)}</div>`);
@@ -131,7 +147,7 @@ function admin(){app.className='wide';const all=JSON.parse(localStorage.getItem(
  const ppl={};all.forEach(r=>{const p=ppl[r.inn]||(ppl[r.inn]={inn:r.inn,fio:r.fio,phone:r.phone,t:{},n:0,photo:false});p.fio=r.fio;p.phone=r.phone;p.n++;if(r.photo)p.photo=true;if(r.consent)p.cons=r.consent;const k=keyOf(r.type);if(k&&(!p.t[k]||p.t[k].date<r.date))p.t[k]=r});
  const AT=allAtt();Object.entries(AT).forEach(([key,a])=>{const [inn,k]=key.split('|');const p=ppl[inn]||(ppl[inn]={inn,fio:a.fio,phone:a.phone,t:{},n:0,photo:false});(p.a||(p.a={}))[k]=a});
  const P=Object.values(ppl);
- app.innerHTML=`<div class="pad screen"><h1>Прохождения (${all.length})</h1><p class="sub">Данные хранятся только в этом браузере (localStorage). Занято ≈ ${Math.round((localStorage.getItem(KEY)||'').length/1024)} КБ из ~5 000 КБ.</p><button class="btn" id="csv" style="max-width:260px;margin-bottom:16px">Экспорт CSV</button>
+ app.innerHTML=`<div class="pad screen"><h1>Прохождения (${all.length})</h1><p class="sub"><a href="${SHEET_URL}" target="_blank" rel="noopener" style="color:#FF2D87;font-weight:800">Открыть Google Таблицу с результатами →</a><br>${API_URL?'Источник истины — таблица; ниже — локальная копия этого устройства.':'Сервер не подключён (API_URL пуст): данные хранятся только в этом браузере (localStorage).'} Занято ≈ ${Math.round((localStorage.getItem(KEY)||'').length/1024)} КБ из ~5 000 КБ.</p><button class="btn" id="csv" style="max-width:260px;margin-bottom:16px">Экспорт CSV</button>
  <h2 style="margin:6px 0 10px">По исполнителям (${P.length})</h2><div class="adm" style="margin-bottom:24px"><table id="ppl"><tr><th>ФИО</th><th>ИНН</th><th>Телефон</th>${TK.map(k=>`<th>${TYPES[k].name}</th>`).join('')}<th>Фото</th></tr>${P.map(p=>`<tr><td>${esc(p.fio)}</td><td>${p.inn}</td><td>${esc(p.phone)}</td>${TK.map(k=>{const r=p.t[k],a=(p.a||{})[k];let h='—',col='inherit';
   if(a&&a.blocked){h=`⛔ Не допущен · ${a.n} попыт. · лучший ${a.best}%`;col='var(--no)'}
   else if(r){const exp=new Date(validTo(r))<new Date();h=`${exp?'⟳':'✓'} ${fmtD(r.date)} · ${r.score}%`;col=exp?'var(--no)':'var(--ok)'}
@@ -191,6 +207,11 @@ function status(inn=S.inn){const recs=myRecs(inn),now=new Date(),st={};
  TK.forEach(k=>{const r=recs.filter(x=>keyOf(x.type)===k).sort((a,b)=>a.date<b.date?1:-1)[0];if(r)st[k]={s:new Date(validTo(r))<now?'exp':'ok',r}});
  TK.forEach(k=>{const a=getAtt(inn,k);if(a.blocked&&!(st[k]&&st[k].s==='ok'))st[k]={s:'blk',a}});
  TK.forEach(k=>{if(st[k]&&st[k].s==='ok')(REC[k]||[]).forEach(([t,why])=>{if(!st[t])st[t]={s:'rec',why}})});
+ if(S.srv&&inn===S.inn)TK.forEach(k=>{const t=S.srv[k];if(!t)return;
+  if(t.status==='blocked')st[k]={s:'blk',a:{...getAtt(inn,k),best:t.best,n:t.attempts}};
+  else if((t.status==='passed'||t.status==='expired')&&!(st[k]&&(st[k].s==='ok'||st[k].s==='exp'))){const r={id:t.recordId,fio:S.fio,inn,phone:S.phone,type:TYPES[k],date:t.passedAt,score:t.best,tries:t.attempts,sig:'',photo:''};st[k]={s:t.status==='passed'?'ok':'exp',r}}
+  else if(t.status==='none'&&st[k]&&st[k].s==='blk')delete st[k];});
+ TK.forEach(k=>{if(st[k]&&st[k].s==='ok')(REC[k]||[]).forEach(([t,why])=>{if(!st[t])st[t]={s:'rec',why}})});
  TK.forEach(k=>{if(!st[k])st[k]={s:'none'}});return st}
 function nextRec(st){return TK.find(k=>st[k].s==='exp')||TK.find(k=>st[k].s==='rec')||TK.find(k=>st[k].s==='none')}
 function startType(k){if(getAtt(S.inn,k).blocked){S.type=k;blocked(k);return}S.type=k;S.slides=[...COMMON_BEFORE,...SPECIFIC[k],...COMMON_AFTER];S.i=0;S.maxRead=-1;S.photo=null;S.photoAt=null;S.sig=null;S.tries=getAtt(S.inn,k).n;slide()}
@@ -222,7 +243,15 @@ function blocked(k){const a=getAtt(S.inn,k);render(`<div class="top"><button cla
  <div class="card"><div class="grid" style="padding:0"><div><span class="lbl">Исполнитель</span>${esc(a.fio||S.fio)}</div><div><span class="lbl">ИНН</span>${S.inn}</div><div><span class="lbl">Попыток</span>${a.n} из ${MAXA}</div><div><span class="lbl">Лучший результат</span>${a.best}%</div><div class="full"><span class="lbl">Дата</span>${a.date?fmt(a.date):'—'}</div></div></div>
  <button class="btn ghost" id="todash">Моё обучение</button></div>`);$('#bk').onclick=$('#todash').onclick=dashboard}
 new URLSearchParams(location.search).has('admin')?admin():start();
-function hasHist(){return myRecs().length>0||Object.keys(allAtt()).some(k=>k.startsWith(S.inn+'|'))}
+function hasHist(){return myRecs().length>0||(S.srv&&Object.values(S.srv).some(t=>t.status!=='none'))||Object.keys(allAtt()).some(k=>k.startsWith(S.inn+'|'))}
+
+async function checkSrv(){const score=S.qs.filter((q,i)=>S.ans[i]===q.c).length;
+ render(`<div class="pad" style="text-align:center;padding-top:30vh"><div class="spin"></div><p class="sub">Сохраняем результат…</p></div>`);
+ let r;try{r=await api('attempt',{consent:S.consent,inn:S.inn,fio:S.fio,phone:S.phone,type:S.type,score})}catch(e){r=null}
+ if(!r){render(`<div class="pad" style="padding-top:12vh"><h1>Нет связи</h1><p class="sub">${NET}. Результат теста ещё не сохранён — ответы не потеряны.</p><button class="btn" id="resend">Отправить ещё раз</button></div>`);$('#resend').onclick=checkSrv;return}
+ if(!r.ok&&r.error==='blocked'){setAtt(S.inn,S.type,{...getAtt(S.inn,S.type),n:r.state.attempts,best:r.state.best,blocked:true,fio:S.fio,type:TYPES[S.type],date:new Date().toISOString()});blocked(S.type);return}
+ if(!r.ok){render(`<div class="pad" style="padding-top:12vh"><h1>Ошибка</h1><p class="sub">Сервер ответил: ${esc(r.error)}</p><button class="btn" id="resend">Повторить</button></div>`);$('#resend').onclick=checkSrv;return}
+ S.tries=r.attempt;if(S.srv)S.srv[S.type]={...(S.srv[S.type]||{}),status:r.blocked?'blocked':r.passed?'pending':'progress',attempts:r.attempt,best:r.best};S.sent=true;check()}
 
 const CONSENT_V='1.0 от 15.10.2026';
 const CONSENT_HTML=`<h2>Согласие на обработку персональных данных</h2>
