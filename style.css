@@ -21,6 +21,9 @@ main{max-width:520px;margin:0 auto;min-height:100%;position:relative}
 .hero p{color:rgba(255,255,255,.78);margin:0;font-size:15px;line-height:1.45}
 .chips{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}.chips span{background:rgba(255,255,255,.16);backdrop-filter:blur(10px);padding:7px 12px;border-radius:999px;font-size:12px;font-weight:700;color:#fff}
 .form{margin:-8px 0 0;background:#fff;border-radius:30px;padding:8px 20px 22px;box-shadow:0 20px 50px -20px rgba(11,11,18,.18)}
+.whoami{margin:12px 0 0;padding:10px 12px;border-radius:14px;background:#F1F2F6;font-size:13px;font-weight:600;color:var(--m);line-height:1.35}
+.whoami b{color:var(--t);font-weight:800}
+.whoami a{color:#FF2D87;font-weight:800;text-decoration:none}
 label{display:block;font-weight:700;font-size:13px;color:var(--m);margin:16px 0 7px}
 input[type=text],input[type=tel]{width:100%;padding:18px;border:0;background:#F1F2F6;border-radius:18px;font-weight:600;font-size:17px;font-family:inherit;color:var(--t);transition:box-shadow .25s,background .25s}
 input:focus{outline:none;background:#fff;box-shadow:0 0 0 2.5px #FF4D6D}
