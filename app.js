@@ -6,6 +6,20 @@ async function api(action,data,ms=30000){const ac=new AbortController(),t=setTim
  try{const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({token:API_TOKEN,action,...data}),redirect:'follow',signal:ac.signal});
   if(!r.ok)throw new Error('http '+r.status);return await r.json()}finally{clearTimeout(t)}}
 const NET='Нет связи, попробуйте позже';
+
+// ===== Linear progress (simulated → ~90%, finish → 100%; real set() when known)
+function progHTML(label,cls=''){return `<div class="pload ${cls}"><div class="plbl">${esc(label||'')}</div><div class="ptrack"><i class="pfill" style="width:0%"></i></div><div class="ppct">0%</div></div>`}
+function startProg(root,{expect=40000}={}){const fill=root.querySelector('.pfill'),pct=root.querySelector('.ppct');if(!fill||!pct)return{set(){},finish(){},stop(){}};
+ let cur=0,alive=true,t0=performance.now(),raf=0;
+ const paint=p=>{cur=Math.max(0,Math.min(99.5,p));fill.style.width=cur.toFixed(1)+'%';pct.textContent=Math.round(cur)+'%'};
+ const tick=()=>{if(!alive)return;const e=Math.min(1,(performance.now()-t0)/expect);paint(90*(1-Math.exp(-2.4*e)));raf=requestAnimationFrame(tick)};
+ raf=requestAnimationFrame(tick);
+ return{set(p){paint(+p*100||+p)},finish(){alive=false;cancelAnimationFrame(raf);fill.style.transition='width .2s ease-out';cur=100;fill.style.width='100%';pct.textContent='100%'},stop(){alive=false;cancelAnimationFrame(raf)}}}
+async function fetchBuf(url,onP){const r=await fetch(url);if(!r.ok)throw new Error('http '+r.status);const total=+r.headers.get('content-length')||0;
+ if(!r.body||!total||!r.body.getReader){const b=await r.arrayBuffer();onP&&onP(1);return b}
+ const reader=r.body.getReader();const chunks=[];let got=0;
+ while(true){const{done,value}=await reader.read();if(done)break;chunks.push(value);got+=value.byteLength;onP&&onP(got/total)}
+ const out=new Uint8Array(got);let o=0;for(const c of chunks){out.set(c,o);o+=c.byteLength}return out.buffer}
 function syncSrv(types){S.srv=types;Object.entries(types).forEach(([k,t])=>{if(t.status==='none')delAtt(S.inn,k);else if(t.status==='passed'||t.status==='expired')delAtt(S.inn,k);else setAtt(S.inn,k,{...getAtt(S.inn,k),n:t.attempts,best:t.best,blocked:t.status==='blocked',fio:S.fio,phone:S.phone,type:TYPES[k],date:new Date().toISOString()})})}
 const $=s=>document.querySelector(s), app=$('#app');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -43,7 +57,10 @@ function start(){render(`<div class="hero"><img src="img/conveyor.jpg" alt="">${
   $('#e4').textContent=!$('#pdn').checked||!$('#phc').checked?(ok=false,'Необходимо дать оба согласия — без них инструктаж пройти нельзя'):'';
   if(!ok){$('.form').classList.remove('shake');void $('.form').offsetWidth;$('.form').classList.add('shake');return}
   S.fio=fio;S.inn=inn;S.phone='+7'+pd.slice(-10);S.consent={v:CONSENT_V,at:new Date().toISOString(),pdn:true,photo:true};localStorage.setItem('ot_consent_'+inn,JSON.stringify(S.consent));localStorage.setItem('ot_last_inn',inn);
-  if(API_URL){const g=$('#go');g.disabled=true;g.textContent='Проверяем…';api('status',{inn}).then(r=>{if(!r.ok)throw new Error(r.error);syncSrv(r.types);hasHist()?dashboard():chooseType()}).catch(()=>{g.disabled=false;g.textContent='Начать инструктаж →';$('#e3').textContent=NET})}
+  if(API_URL){const g=$('#go');g.disabled=true;g.textContent='Проверяем…';
+   let box=$('#go-prog');if(!box){box=document.createElement('div');box.id='go-prog';g.insertAdjacentElement('afterend',box)}
+   box.innerHTML=progHTML('Проверяем допуск…','inline sm');const pg=startProg(box,{expect:40000});
+   api('status',{inn},45000).then(r=>{if(!r.ok)throw new Error(r.error);pg.finish();syncSrv(r.types);hasHist()?dashboard():chooseType()}).catch(()=>{pg.stop();box.innerHTML='';g.disabled=false;g.textContent='Начать инструктаж →';$('#e3').textContent=NET})}
   else hasHist()?dashboard():chooseType();};
 }
 function chooseType(){render(`<div class="top"><button class="back" id="bk">←</button></div><div class="pad" style="padding-top:8px">
@@ -118,13 +135,17 @@ function sign(){render(`<div class="top"><button class="back" id="bk">←</butto
  done.onclick=()=>{S.sig=c.toDataURL('image/png');finish()};done.insertAdjacentHTML('afterend','<div class="err" id="serr" style="text-align:center"></div>');
 }
 async function finish(){const d=new Date();S.recId=S.recId||Date.now().toString(36).toUpperCase();let id=S.recId;
- if(API_URL){const b=$('#done'),er=$('#serr');b.disabled=true;b.textContent='Сохраняем… (до 1 минуты)';er.innerHTML='';
+ if(API_URL){const b=$('#done'),er=$('#serr');b.disabled=true;b.textContent='Сохраняем…';er.innerHTML='';
+  const hold=document.createElement('div');hold.id='save-hold';hold.style.cssText='position:fixed;inset:0;z-index:90;background:rgba(244,245,248,.92);display:flex;align-items:center;justify-content:center;padding:24px';
+  hold.innerHTML=`<div style="width:100%;max-width:320px;text-align:center"><h2 style="margin:0 0 6px;font-size:22px;font-weight:800">Сохраняем…</h2><p class="sub" style="margin:0 0 4px">Первый ответ сервера может занять до 1 минуты</p>${progHTML('Запись в Google Таблицу')}</div>`;
+  document.body.appendChild(hold);const pg=startProg(hold,{expect:60000});
   let r,netErr=false;try{r=await api('complete',{consent:S.consent,inn:S.inn,type:S.type,fio:S.fio,phone:S.phone,agree:true,photo:S.photo,photoAt:S.photoAt,sig:S.sig,recordId:id,face:S.face||null},90000)}catch(e){r=null;netErr=true}
+  const dropHold=()=>{pg.stop();hold.remove()};
   // ответ мог потеряться (таймаут/обрыв), а запись на сервере уже сделана — сверяемся со статусом
   if(!r||!r.ok){try{const st=await api('status',{inn:S.inn},45000);const t=st&&st.ok&&st.types&&st.types[S.type];
     if(t&&t.status==='passed'&&(t.recordId===id||(t.passedAt&&Date.now()-new Date(t.passedAt)<30*60000))){syncSrv(st.types);r={ok:true,recordId:t.recordId,passedAt:t.passedAt,validTo:t.validTo}}
     else if(t&&r&&r.error==='not_passed')r.detail=t.status}catch(e){}}
-  if(!r||!r.ok){b.disabled=false;b.textContent='Подписать';
+  if(!r||!r.ok){dropHold();b.disabled=false;b.textContent='Подписать';
    const msg=!r?'Нет связи с сервером или он не ответил вовремя. Данные не потеряны — проверьте интернет и нажмите «Повторить».'
     :r.error==='not_passed'?(r.detail==='blocked'?'Сервер не принял подпись: по этому виду услуг исчерпаны попытки (статус «Не допущен»). Обратитесь к координатору Заказчика.':r.detail==='progress'||r.detail==='none'?'Сервер не нашёл сданного теста по виду услуг «'+esc(TYPES[S.type].name)+'» для ИНН '+S.inn+'. Пройдите тест заново.':'Сервер не подтвердил сдачу теста. Нажмите «Повторить»; если ошибка повторится — обратитесь к координатору Заказчика.')
     :r.error==='busy'?'Сервер занят другими исполнителями. Подождите несколько секунд и нажмите «Повторить».'
@@ -132,7 +153,7 @@ async function finish(){const d=new Date();S.recId=S.recId||Date.now().toString(
     :/image/.test(r.error)?'Не удалось сохранить фото или подпись. Переснимите селфи и нажмите «Повторить».'
     :'Ошибка сервера ('+esc(r.error)+'). Нажмите «Повторить».';
    er.innerHTML=msg+'<button class="btn ghost" id="retry" style="margin-top:10px">Повторить</button>';$('#retry').onclick=finish;return}
-  id=r.recordId;S.recId=null;if(S.srv)S.srv[S.type]={status:'passed',attempts:S.tries,best:S.score*10,passedAt:r.passedAt,validTo:r.validTo,recordId:id}}
+  pg.finish();await new Promise(x=>setTimeout(x,180));dropHold();id=r.recordId;S.recId=null;if(S.srv)S.srv[S.type]={status:'passed',attempts:S.tries,best:S.score*10,passedAt:r.passedAt,validTo:r.validTo,recordId:id}}
  const rec={id,fio:S.fio,inn:S.inn,phone:S.phone,type:TYPES[S.type].name,date:d.toISOString(),score:S.score*10,tries:S.tries,sig:S.sig,photo:S.photo,photoAt:S.photoAt,consent:S.consent};
  const all=JSON.parse(localStorage.getItem(KEY)||'[]');all.push(rec);
  try{localStorage.setItem(KEY,JSON.stringify(all))}catch(e){alert('Память браузера заполнена: запись не сохранена в журнал на этом устройстве. Сообщите координатору — нужно выгрузить CSV и очистить журнал. Подтверждение ниже можно сохранить в PDF.')}cert(rec)}
@@ -181,10 +202,15 @@ function drawSelfie(){const w=$('#selfie');if(!w)return;
  const b=$('#sfopen')||$('#sfre');b.onclick=openCam;S.upd&&S.upd();}
 let stream=null,camLoop=0;
 const MP='./mp/';let FL=null,FLp=null;
-function loadFL(){if(FL)return Promise.resolve(FL);if(FLp)return FLp;
- FLp=(async()=>{const m=await import(MP+'vision_bundle.mjs');const fs=await m.FilesetResolver.forVisionTasks(MP+'wasm');
-  const mk=d=>m.FaceLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:MP+'face_landmarker.task',delegate:d},runningMode:'VIDEO',numFaces:2,outputFaceBlendshapes:true,minFaceDetectionConfidence:.6,minFacePresenceConfidence:.6});
-  try{FL=await mk('GPU')}catch(e){FL=await mk('CPU')}return FL})();
+function loadFL(onP){if(FL){onP&&onP(1);return Promise.resolve(FL)}if(FLp)return FLp.then(x=>{onP&&onP(1);return x});
+ FLp=(async()=>{onP&&onP(.02);const m=await import(MP+'vision_bundle.mjs');onP&&onP(.12);const fs=await m.FilesetResolver.forVisionTasks(MP+'wasm');onP&&onP(.2);
+  let buf;try{buf=await fetchBuf(MP+'face_landmarker.task',p=>onP&&onP(.2+.7*p))}catch(e){buf=null}
+  onP&&onP(.92);
+  const mk=(d,base)=>m.FaceLandmarker.createFromOptions(fs,{baseOptions:{...base,delegate:d},runningMode:'VIDEO',numFaces:2,outputFaceBlendshapes:true,minFaceDetectionConfidence:.6,minFacePresenceConfidence:.6});
+  const tryMk=async base=>{try{return await mk('GPU',base)}catch(e){return await mk('CPU',base)}};
+  try{FL=buf?await tryMk({modelAssetBuffer:new Uint8Array(buf)}):await tryMk({modelAssetPath:MP+'face_landmarker.task'})}
+  catch(e){if(buf)FL=await tryMk({modelAssetPath:MP+'face_landmarker.task'});else throw e}
+  onP&&onP(1);return FL})();
  FLp.catch(()=>{FLp=null});return FLp}
 let lastTs=0;function fts(){let t=performance.now();if(t<=lastTs)t=lastTs+1;lastTs=t;return t}
 // оценка лица в кадре 3:4 (кроп по центру, как при съёмке)
@@ -208,14 +234,16 @@ async function openCam(){closeCam();const o=document.createElement('div');o.id='
   $('#camretry').onclick=openCam;$('#camclose').onclick=closeCam};
  if(!window.isSecureContext||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){fail('Браузер не даёт доступ к камере на этой странице.');return}
  const hint=$('#camhint');
- const flP=loadFL();
  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:720},height:{ideal:960}},audio:false})}
  catch(e){fail(e&&e.name==='NotAllowedError'?'Доступ к камере запрещён.':e&&e.name==='NotFoundError'?'На устройстве не найдена камера.':e&&e.name==='NotReadableError'?'Камера занята другим приложением.':e&&(e.name==='SecurityError'||e.name==='NotSupportedError')?'Браузер заблокировал доступ к камере.':'Не удалось включить камеру ('+esc(e&&e.name||e)+').');return}
  const v=$('#vf');if(!v){closeCam();return}v.srcObject=stream;
  await new Promise(r=>{if(v.readyState>=1)r();else v.onloadedmetadata=r});try{await v.play()}catch(e){}
  hint.textContent='Загружаем распознавание лица…';
- let fl;try{fl=await Promise.race([flP,new Promise((_,j)=>setTimeout(()=>j(new Error('timeout')),45000))])}
- catch(e){fail('Не удалось загрузить модуль распознавания лица. Проверьте интернет и попробуйте снова.','Нет распознавания лица','');return}
+ let pwrap=$('#cam-prog');if(!pwrap){pwrap=document.createElement('div');pwrap.id='cam-prog';pwrap.style.cssText='position:absolute;left:24px;right:24px;top:calc(70px + env(safe-area-inset-top));z-index:4';o.appendChild(pwrap)}
+ pwrap.innerHTML=progHTML('Загрузка модели…','dark sm');const pg=startProg(pwrap,{expect:25000});
+ let fl;try{fl=await Promise.race([loadFL(p=>pg.set(Math.min(.98,p))),new Promise((_,j)=>setTimeout(()=>j(new Error('timeout')),45000))]);pg.finish()}
+ catch(e){pg.stop();fail('Не удалось загрузить модуль распознавания лица. Проверьте интернет и попробуйте снова.','Нет распознавания лица','');return}
+ pwrap.remove();
  if(!$('#cam'))return;
  const oval=$('#oval'),shot=$('#shot'),fill=$('#livefill'),shl=$('#shl');
  // фазы: align → live (моргнуть/повернуть) → hold (смотрим прямо) → снимок
@@ -311,8 +339,9 @@ function adminLogin(err){app.className='';app.innerHTML=`<div class="pad screen"
  <p class="sub" style="margin-top:18px"><a href="#" id="aloc" style="color:var(--m)">Показать данные только этого устройства</a></p></div>`;
  const go=()=>{const v=$('#apw').value.trim();if(!v)return;sessionStorage.setItem(AKP,v);adminLoad()};$('#ago').onclick=go;$('#apw').onkeydown=e=>{if(e.key==='Enter')go()};$('#aloc').onclick=e=>{e.preventDefault();adminLocal()}}
 function adminSrv(){sessionStorage.getItem(AKP)?adminLoad():adminLogin()}
-async function adminLoad(){app.className='';app.innerHTML=`<div class="pad screen"><h1>Админка</h1><p class="sub">Загружаем данные из Google Таблицы… Первый запрос может занять до 40 секунд.</p><div class="spin" style="margin:30px auto;width:36px;height:36px;border:4px solid #EEF0F3;border-top-color:#FF2D87;border-radius:50%;animation:adspin 1s linear infinite"></div></div><style>@keyframes adspin{to{transform:rotate(360deg)}}</style>`;
- let r;try{r=await api('admin_list',{admin:sessionStorage.getItem(AKP)},60000)}catch(e){r={ok:false,error:'net'}}
+async function adminLoad(){app.className='';app.innerHTML=`<div class="pad screen"><h1>Админка</h1><p class="sub">Загружаем данные из Google Таблицы… Первый запрос может занять до 40 секунд.</p><div id="adm-prog">${progHTML('Загрузка списка')}</div></div>`;
+ const pg=startProg($('#adm-prog'),{expect:40000});
+ let r;try{r=await api('admin_list',{admin:sessionStorage.getItem(AKP)},60000);pg.finish()}catch(e){pg.stop();r={ok:false,error:'net'}}
  if(!r.ok){if(r.error==='bad_admin'){sessionStorage.removeItem(AKP);return adminLogin('Неверный пароль')}
   app.innerHTML=`<div class="pad screen"><h1>Админка</h1><div class="blk"><div class="bico">⚠️</div><b>Не удалось загрузить данные с сервера</b><p>${r.error==='net'?'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.':r.error==='unknown_action'?'На сервере старая версия скрипта. Обновите код в Apps Script и сделайте «Новую версию» развертывания.':'Ошибка сервера: '+esc(r.error)}</p></div>
   <button class="btn" id="arty" style="margin-top:14px">Повторить</button><p class="sub" style="margin-top:14px"><a href="${SHEET_URL}" target="_blank" rel="noopener" style="color:#FF2D87;font-weight:800">Открыть Google Таблицу →</a><br><a href="#" id="aloc" style="color:var(--m)">Данные только этого устройства</a></p></div>`;
@@ -347,8 +376,9 @@ new URLSearchParams(location.search).has('admin')?admin():start();
 function hasHist(){return myRecs().length>0||(S.srv&&Object.values(S.srv).some(t=>t.status!=='none'))||Object.keys(allAtt()).some(k=>k.startsWith(S.inn+'|'))}
 
 async function checkSrv(){const score=S.qs.filter((q,i)=>S.ans[i]===q.c).length;
- render(`<div class="pad" style="text-align:center;padding-top:30vh"><div class="spin"></div><p class="sub">Сохраняем результат…</p></div>`);
- let r;try{r=await api('attempt',{consent:S.consent,inn:S.inn,fio:S.fio,phone:S.phone,type:S.type,score})}catch(e){r=null}
+ render(`<div class="pad" style="text-align:center;padding-top:22vh"><h2 style="margin:0 0 8px;font-size:22px;font-weight:800">Сохраняем результат…</h2><p class="sub">Первый ответ может занять до 40 секунд</p><div id="chk-prog">${progHTML('Отправка на сервер')}</div></div>`);
+ const pg=startProg($('#chk-prog'),{expect:40000});
+ let r;try{r=await api('attempt',{consent:S.consent,inn:S.inn,fio:S.fio,phone:S.phone,type:S.type,score});pg.finish();await new Promise(x=>setTimeout(x,160))}catch(e){pg.stop();r=null}
  if(!r){render(`<div class="pad" style="padding-top:12vh"><h1>Нет связи</h1><p class="sub">${NET}. Результат теста ещё не сохранён — ответы не потеряны.</p><button class="btn" id="resend">Отправить ещё раз</button></div>`);$('#resend').onclick=checkSrv;return}
  if(!r.ok&&r.error==='blocked'){setAtt(S.inn,S.type,{...getAtt(S.inn,S.type),n:r.state.attempts,best:r.state.best,blocked:true,fio:S.fio,type:TYPES[S.type],date:new Date().toISOString()});blocked(S.type);return}
  if(!r.ok){render(`<div class="pad" style="padding-top:12vh"><h1>Ошибка</h1><p class="sub">Сервер ответил: ${esc(r.error)}</p><button class="btn" id="resend">Повторить</button></div>`);$('#resend').onclick=checkSrv;return}
