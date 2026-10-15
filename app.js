@@ -1,22 +1,5 @@
-/* ---- Озвучка ---- */
-var TTS={a:null,q:[],i:0,on:false,btn:null,run:0};
-function ttsKey(t){let x=0x811c9dc5;for(let i=0;i<t.length;i++){x^=t.charCodeAt(i);x=Math.imul(x,16777619)>>>0}return x.toString(36)}
+/* ---- Автовоспроизведение видео-кружка ---- */
 function ttsAuto(){return localStorage.getItem('ot_autotts')==='1'}
-function ttsVoice(){const v=(speechSynthesis.getVoices()||[]).filter(v=>/^ru/i.test(v.lang));return v.find(v=>/Milena|Svetlana|Google|Natural|Neural/i.test(v.name))||v[0]}
-function ttsMark(){document.querySelectorAll('.tts-hl').forEach(e=>e.classList.remove('tts-hl'));const s=TTS.q[TTS.i];s&&s.el&&s.el.classList.add('tts-hl')}
-function ttsUI(){if(!TTS.btn)return;TTS.btn.classList.toggle('playing',TTS.on);TTS.btn.innerHTML=TTS.on?'⏸ Пауза':'🔊 Прослушать'}
-function ttsStop(){TTS.run++;TTS.on=false;TTS.q=[];TTS.i=0;if(TTS.a){TTS.a.pause();TTS.a.removeAttribute('src')}try{window.speechSynthesis&&speechSynthesis.cancel()}catch(e){}document.querySelectorAll('.tts-hl').forEach(e=>e.classList.remove('tts-hl'));ttsUI();TTS.btn=null}
-function ttsPause(){TTS.run++;TTS.on=false;if(TTS.a)TTS.a.pause();try{speechSynthesis.cancel()}catch(e){}ttsUI()}
-function ttsNext(run){if(run!==TTS.run)return;TTS.i++;ttsPlay()}
-function ttsSpeak(t,run){if(!window.speechSynthesis){ttsNext(run);return}const u=new SpeechSynthesisUtterance(t);u.lang='ru-RU';const v=ttsVoice();if(v)u.voice=v;u.onend=u.onerror=()=>ttsNext(run);speechSynthesis.speak(u)}
-function ttsPlay(){const run=TTS.run;if(TTS.i>=TTS.q.length){const b=TTS.btn;TTS.on=false;TTS.i=0;document.querySelectorAll('.tts-hl').forEach(e=>e.classList.remove('tts-hl'));ttsUI();return}
- TTS.on=true;ttsUI();ttsMark();const s=TTS.q[TTS.i];if(!TTS.a)TTS.a=new Audio();const a=TTS.a;let done=false;
- const fb=()=>{if(done||run!==TTS.run)return;done=true;ttsSpeak(s.t,run)};
- a.onended=()=>{if(!done){done=true;ttsNext(run)}};a.onerror=s.src?()=>{if(!done){done=true;TTS.on=false;ttsUI()}}:fb;a.src=s.src?s.src+'?v='+(window.AUDIO_V||1):'audio/'+ttsKey(s.t)+'.mp3';const p=a.play();p&&p.catch&&p.catch(e=>{if(e&&e.name==='NotAllowedError'){TTS.on=false;ttsUI();return}fb()})}
-function ttsBind(btn,segs){TTS.btn=btn;TTS.q=segs;TTS.i=0;btn.onclick=e=>{e.stopPropagation();TTS.btn=btn;if(TTS.on)ttsPause();else{TTS.run++;if(TTS.i>=TTS.q.length)TTS.i=0;ttsPlay()}};
- const t=btn.parentNode.querySelector('.ttsauto');if(t){t.classList.toggle('on',ttsAuto());t.onclick=e=>{e.stopPropagation();const v=!ttsAuto();localStorage.setItem('ot_autotts',v?'1':'0');t.classList.toggle('on',v);if(v&&!TTS.on){TTS.run++;ttsPlay()}}}
- if(ttsAuto()){TTS.run++;ttsPlay()}}
-function ttsBar(){return `<span class="ttsbar"><button class="ttsb" type="button">🔊 Прослушать</button><button class="ttsauto" type="button" title="Автоозвучка">Авто</button></span>`}
 
 /* ---- Видео-кружок (говорящая голова) ---- */
 var VID={v:null,b:null};
@@ -64,7 +47,7 @@ function innValid(v){if(!/^\d{12}$/.test(v))return false;const d=v.split('').map
  const k=w=>w.reduce((s,x,i)=>s+x*d[i],0)%11%10;
  return k([7,2,4,10,3,5,9,4,6,8])===d[10]&&k([3,7,2,4,10,3,5,9,4,6,8])===d[11];}
 function toTop(){const f=()=>{window.scrollTo(0,0);if(document.scrollingElement)document.scrollingElement.scrollTop=0;document.body.scrollTop=0};f();requestAnimationFrame(f);setTimeout(f,60);setTimeout(f,250)}
-function render(html,cls='screen'){ttsStop();vidStop();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();app.className='';app.innerHTML=`<div class="${cls}">${html}</div>`;toTop()}
+function render(html,cls='screen'){vidStop();if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();app.className='';app.innerHTML=`<div class="${cls}">${html}</div>`;toTop()}
 if('scrollRestoration' in history)history.scrollRestoration='manual';
 (function(){const set=()=>{if(document.body.classList.contains('signing'))return;const h=window.visualViewport?visualViewport.height:innerHeight;document.documentElement.style.setProperty('--app-h',Math.round(h)+'px')};set();addEventListener('resize',set);window.visualViewport&&visualViewport.addEventListener('resize',set)})();
 function buzz(){try{navigator.vibrate&&navigator.vibrate(12)}catch(e){}}
@@ -139,11 +122,11 @@ function slide(dir=1){clearTimeout(timer);const s=S.slides[S.i],n=S.slides.lengt
  <div class="segs">${S.slides.map((_,j)=>`<span class="${j<S.i||(j===S.i&&read)?'done':j===S.i?'cur':''}" style="--dur:${READ}s"><i></i></span>`).join('')}</div>
  <div class="shead">${BRAND}<button class="x" id="cls" aria-label="К выбору">✕</button></div>
  <div class="tap l" id="tl"></div><div class="tap r" id="tr"></div>${s.video?vidHTML(s):''}
- <div class="scontent"><div class="slrow"><span class="slbl">${S.i+1}/${n} · ${esc(s.sec)}</span>${s.video?'<span class="ttsbar"><button class="ttsauto" type="button" title="Автовоспроизведение">Авто</button></span>':s.audio?ttsBar():''}</div><h2 class="stitle${s.pts.length+s.no.length+s.ok.length>7?' sm':''}">${esc(s.title)}</h2>
+ <div class="scontent"><div class="slrow"><span class="slbl">${S.i+1}/${n} · ${esc(s.sec)}</span>${s.video?'<span class="ttsbar"><button class="ttsauto" type="button" title="Автовоспроизведение">Авто</button></span>':''}</div><h2 class="stitle${s.pts.length+s.no.length+s.ok.length>7?' sm':''}">${esc(s.title)}</h2>
  <div class="sheet"><div class="chiprow">${chips(s.no,'no','ЗАПРЕЩЕНО','✕')}${chips(s.ok,'ok','ПРАВИЛЬНО','✓')}</div><ul>${s.pts.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>
  <div class="row"><button class="btn glass" id="prev">←</button><button class="btn" id="next" ${read?'':'disabled'}>${read?(S.i<n-1?'Далее →':'К тесту →'):'Читаем…'}</button></div>
  <div class="hint">Свайп ← → или тап по краям фото</div></div></div>`,'');
- if(s.video)vidBind(app.querySelector('.vbub'));else if(s.audio)ttsBind(app.querySelector('.ttsb'),[{t:s.voice||s.title,src:s.audio,el:app.querySelector('.sheet')}]);
+ if(s.video)vidBind(app.querySelector('.vbub'));
  const nx=$('#next');
  if(!read)timer=setTimeout(()=>{S.maxRead=Math.max(S.maxRead,S.i);nx.disabled=false;nx.textContent=S.i<n-1?'Далее →':'К тесту →'},READ*1000);
  const fwd=()=>{if(nx.disabled){nx.animate([{transform:'scale(1)'},{transform:'scale(1.05)'},{transform:'scale(1)'}],{duration:300});return}if(S.i<n-1){S.i++;slide(1)}else startTest()};
