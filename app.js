@@ -29,7 +29,7 @@ function start(){render(`<div class="hero"><img src="img/conveyor.jpg" alt="">${
   $('#e2').textContent=!/^\d{12}$/.test(inn)?(ok=false,'ИНН физического лица — ровно 12 цифр'):!innValid(inn)?(ok=false,'Неверная контрольная сумма ИНН — проверьте цифры'):'';
   const pd=ph.replace(/\D/g,'');$('#e3').textContent=!(pd.length===11&&/^[78]/.test(pd))&&!(pd.length===10)?(ok=false,'Введите номер в формате +7XXXXXXXXXX'):'';
   if(!ok){$('.form').classList.remove('shake');void $('.form').offsetWidth;$('.form').classList.add('shake');return}
-  S.fio=fio;S.inn=inn;S.phone='+7'+pd.slice(-10);chooseType();};
+  S.fio=fio;S.inn=inn;S.phone='+7'+pd.slice(-10);localStorage.setItem('ot_last_inn',inn);myRecs().length?dashboard():chooseType();};
 }
 function chooseType(){render(`<div class="top"><button class="back" id="bk">←</button></div><div class="pad" style="padding-top:8px">
  <h1>Какой вид<br>услуг?</h1><p class="sub">Инструктаж и тест подберём под вид услуг, согласованный с Заказчиком.</p>
@@ -37,7 +37,7 @@ function chooseType(){render(`<div class="top"><button class="back" id="bk">←<
  <div class="dock"><button class="btn" id="nt" ${S.type?'':'disabled'}>Далее →</button></div></div>`);
  $('#bk').onclick=start;
  app.querySelectorAll('.type').forEach(b=>b.onclick=()=>{S.type=b.dataset.k;app.querySelectorAll('.type').forEach(x=>{x.classList.toggle('sel',x===b);x.querySelector('.rad').textContent=x===b?'✓':''});$('#nt').disabled=false});
- $('#nt').onclick=()=>{S.slides=[...COMMON_BEFORE,...SPECIFIC[S.type],...COMMON_AFTER];S.i=0;S.maxRead=-1;slide()};
+ $('#nt').onclick=()=>startType(S.type);
 }
 let timer;
 function slide(dir=1){clearTimeout(timer);const s=S.slides[S.i],n=S.slides.length,read=S.i<=S.maxRead,dia=s.img&&s.img.endsWith('.png');
@@ -54,7 +54,7 @@ function slide(dir=1){clearTimeout(timer);const s=S.slides[S.i],n=S.slides.lengt
  if(!read)timer=setTimeout(()=>{S.maxRead=Math.max(S.maxRead,S.i);nx.disabled=false;nx.textContent=S.i<n-1?'Далее →':'К тесту →'},READ*1000);
  const fwd=()=>{if(nx.disabled){nx.animate([{transform:'scale(1)'},{transform:'scale(1.05)'},{transform:'scale(1)'}],{duration:300});return}if(S.i<n-1){S.i++;slide(1)}else startTest()};
  const bwd=()=>{if(S.i>0){S.i--;slide(-1)}};
- nx.onclick=fwd;$('#prev').onclick=bwd;$('#tr').onclick=fwd;$('#tl').onclick=bwd;$('#cls').onclick=chooseType;
+ nx.onclick=fwd;$('#prev').onclick=bwd;$('#tr').onclick=fwd;$('#tl').onclick=bwd;$('#cls').onclick=()=>myRecs().length?dashboard():chooseType();
  const st=$('#story'),sc=st.querySelector('.scontent');let x0=null,y0=0;
  st.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;x0=e.clientX;y0=e.clientY});
  st.addEventListener('pointermove',e=>{if(x0===null)return;const dx=e.clientX-x0;if(Math.abs(dx)>Math.abs(e.clientY-y0))sc.style.transform=`translateX(${dx*.35}px)`});
@@ -116,17 +116,24 @@ function cert(r){render(`<div class="pad"><h1 class="noprint" style="margin-top:
  <div class="full"><span class="lbl">Объект · Заказчик</span>Склад «Лемана ПРО» · ООО «Персональное Решение»</div>
  <div class="full"><span class="lbl">Подпись</span><img class="sig" src="${r.sig}" alt="подпись"></div></div>
  <p class="fine">Исполнитель ознакомлен с Правилами техники безопасности и правилами нахождения на объекте (приложение к договору возмездного оказания услуг) и обязуется их соблюдать. Инструктаж на месте оказания услуг проводится координатором Заказчика / представителем объекта дополнительно.</p></div></div>
- <div class="noprint" style="margin-top:20px"><button class="btn" id="pdf">Скачать PDF</button><button class="btn ghost" id="again">Новый инструктаж</button></div></div>`);
- $('#pdf').onclick=()=>window.print();$('#again').onclick=()=>{reset();start()};
+ <div class="noprint" style="margin-top:20px"><button class="btn" id="pdf">Скачать PDF</button><button class="btn ghost" id="mine">Моё обучение</button><button class="btn ghost" id="again">Выйти</button></div>
+ ${recBlock(r)}</div>`);
+ $('#pdf').onclick=()=>window.print();$('#again').onclick=()=>{reset();start()};$('#mine').onclick=()=>{if(!S.inn){S.inn=r.inn;S.fio=r.fio;S.phone=r.phone}dashboard()};
+ app.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{if(!S.inn){S.inn=r.inn;S.fio=r.fio;S.phone=r.phone}startType(b.dataset.go)});
 }
 function admin(){app.className='wide';const all=JSON.parse(localStorage.getItem(KEY)||'[]');
- app.innerHTML=`<div class="pad screen"><h1>Прохождения (${all.length})</h1><p class="sub">Данные хранятся только в этом браузере (localStorage). Занято ≈ ${Math.round((localStorage.getItem(KEY)||'').length/1024)} КБ из ~5 000 КБ.</p><button class="btn" id="csv" style="max-width:260px;margin-bottom:16px">Экспорт CSV</button><div class="adm"><table><tr><th>№</th><th>Дата</th><th>ФИО</th><th>ИНН</th><th>Телефон</th><th>Вид услуг</th><th>Результат</th><th>Попыток</th><th>Фото</th><th>Время фото</th><th>Подпись</th></tr>`+
+ const ppl={};all.forEach(r=>{const p=ppl[r.inn]||(ppl[r.inn]={inn:r.inn,fio:r.fio,phone:r.phone,t:{},n:0,photo:false});p.fio=r.fio;p.phone=r.phone;p.n++;if(r.photo)p.photo=true;const k=keyOf(r.type);if(k&&(!p.t[k]||p.t[k].date<r.date))p.t[k]=r});
+ const P=Object.values(ppl);
+ app.innerHTML=`<div class="pad screen"><h1>Прохождения (${all.length})</h1><p class="sub">Данные хранятся только в этом браузере (localStorage). Занято ≈ ${Math.round((localStorage.getItem(KEY)||'').length/1024)} КБ из ~5 000 КБ.</p><button class="btn" id="csv" style="max-width:260px;margin-bottom:16px">Экспорт CSV</button>
+ <h2 style="margin:6px 0 10px">По исполнителям (${P.length})</h2><div class="adm" style="margin-bottom:24px"><table id="ppl"><tr><th>ФИО</th><th>ИНН</th><th>Телефон</th>${TK.map(k=>`<th>${TYPES[k].name}</th>`).join('')}<th>Фото</th></tr>${P.map(p=>`<tr><td>${esc(p.fio)}</td><td>${p.inn}</td><td>${esc(p.phone)}</td>${TK.map(k=>{const r=p.t[k];if(!r)return'<td>—</td>';const exp=new Date(validTo(r))<new Date();return`<td style="color:${exp?'var(--no)':'var(--ok)'};font-weight:700">${exp?'⟳':'✓'} ${fmtD(r.date)} · ${r.score}%</td>`}).join('')}<td>${p.photo?'есть':'нет'}</td></tr>`).join('')}</table></div>
+ <h2 style="margin:6px 0 10px">Все прохождения (${all.length})</h2><div class="adm"><table><tr><th>№</th><th>Дата</th><th>ФИО</th><th>ИНН</th><th>Телефон</th><th>Вид услуг</th><th>Результат</th><th>Попыток</th><th>Фото</th><th>Время фото</th><th>Подпись</th></tr>`+
  all.slice().reverse().map(r=>`<tr><td>${r.id}</td><td>${fmt(r.date)}</td><td>${esc(r.fio)}</td><td>${r.inn}</td><td>${esc(r.phone)}</td><td>${esc(r.type)}</td><td>${r.score}%</td><td>${r.tries}</td><td>${r.photo?`<img src="${r.photo}" style="height:44px;width:44px;object-fit:cover;border-radius:12px">`:'—'}</td><td>${r.photoAt?fmtS(r.photoAt):'—'}</td><td><img src="${r.sig}" style="height:30px"></td></tr>`).join('')+`</table></div></div>`;
- $('#csv').onclick=()=>{const h=['id','date','fio','inn','phone','type','score','tries'];const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
-  const csv='\ufeff'+[...h,'Фото: есть/нет','Время фото'].join(';')+'\n'+all.map(r=>[...h.map(k=>q(k==='date'?fmt(r[k]):k==='inn'?'\t'+r[k]:r[k])),q(r.photo?'есть':'нет'),q(r.photoAt?fmtS(r.photoAt):'')].join(';')).join('\n');
+ $('#csv').onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const head=['ФИО','ИНН','Телефон',...TK.flatMap(k=>[TYPES[k].name+': дата',TYPES[k].name+': результат',TYPES[k].name+': действует до']),'Фото: есть/нет','Всего прохождений'];
+  const rows=P.map(p=>[p.fio,'\t'+p.inn,p.phone,...TK.flatMap(k=>{const r=p.t[k];return r?[fmt(r.date),r.score+'%',fmtD(validTo(r))]:['','','']}),p.photo?'есть':'нет',p.n]);
+  const csv='\ufeff'+[head,...rows].map(r=>r.map(q).join(';')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='instruktazh_'+new Date().toISOString().slice(0,10)+'.csv';a.click()};
 }
-new URLSearchParams(location.search).has('admin')?admin():start();
 
 function drawSelfie(){const w=$('#selfie');if(!w)return;
  w.innerHTML=S.photo?`<div class="sfrow"><img class="sfthumb" src="${S.photo}" alt=""><div><div style="font-weight:800">Фото сделано ✓</div><div class="sub" style="margin:2px 0 0;font-size:13px">${fmtS(S.photoAt)}</div><button class="btn ghost" id="sfre" style="width:auto;padding:10px 16px;font-size:14px;margin-top:8px">Переснять</button></div></div>`
@@ -161,3 +168,33 @@ async function openCam(){closeCam();const o=document.createElement('div');o.id='
  document.addEventListener('focusout',e=>{if(e.target===fe){fe=null;setTimeout(()=>{if(!fe)document.body.classList.remove('kbopen')},150)}});
  vv&&vv.addEventListener('resize',()=>{sync();clearTimeout(t);t=setTimeout(center,120)});
 })();
+
+const TK=['pick','load','t4','t4p'];
+const REC={pick:[['load','Часто совмещается с комплектацией'],['t4','Электротележки ускоряют отбор']],load:[['pick','Смежный вид услуг на складе'],['t4','Перемещение паллет электротележкой']],t4:[['t4p','Следующий уровень. Нужно удостоверение тракториста-машиниста']],t4p:[['t4','Электротележки и штабелёры до 4 кВт']]};
+function keyOf(name){return TK.find(k=>TYPES[k].name===name)}
+function validTo(r){const d=new Date(r.date);d.setMonth(d.getMonth()+6);return d.toISOString()}
+function fmtD(iso){return new Date(iso).toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'})}
+function myRecs(inn=S.inn){return JSON.parse(localStorage.getItem(KEY)||'[]').filter(r=>r.inn===inn)}
+function status(inn=S.inn){const recs=myRecs(inn),now=new Date(),st={};
+ TK.forEach(k=>{const r=recs.filter(x=>keyOf(x.type)===k).sort((a,b)=>a.date<b.date?1:-1)[0];if(r)st[k]={s:new Date(validTo(r))<now?'exp':'ok',r}});
+ TK.forEach(k=>{if(st[k]&&st[k].s==='ok')(REC[k]||[]).forEach(([t,why])=>{if(!st[t])st[t]={s:'rec',why}})});
+ TK.forEach(k=>{if(!st[k])st[k]={s:'none'}});return st}
+function nextRec(st){return TK.find(k=>st[k].s==='exp')||TK.find(k=>st[k].s==='rec')||TK.find(k=>st[k].s==='none')}
+function startType(k){S.type=k;S.slides=[...COMMON_BEFORE,...SPECIFIC[k],...COMMON_AFTER];S.i=0;S.maxRead=-1;S.photo=null;S.photoAt=null;S.sig=null;S.tries=0;slide()}
+const BADGE={ok:['Пройдено ✓','b-ok'],rec:['Рекомендовано','b-rec'],exp:['Требуется повтор','b-exp'],none:['Не пройдено','b-none']};
+function dashboard(){const st=status(),done=TK.filter(k=>st[k].s==='ok').length,nx=nextRec(st),C=2*Math.PI*44;
+ render(`<div class="top"><button class="back" id="bk">←</button><div style="margin-left:auto;font-weight:700;color:var(--m);font-size:13px;text-align:right">${esc(S.fio)}<br>ИНН ${S.inn}</div></div>
+ <div class="pad" style="padding-top:6px"><h1>Моё обучение</h1>
+ <div class="dash"><svg class="ring" viewBox="0 0 100 100"><defs><linearGradient id="rg" x1="0" x2="1"><stop offset="0" stop-color="#FF6B00"/><stop offset="1" stop-color="#FF2D87"/></linearGradient></defs><circle cx="50" cy="50" r="44" class="rb"/><circle cx="50" cy="50" r="44" class="rf" style="stroke-dasharray:${C};--off:${C*(1-done/4)}"/></svg>
+ <div><div class="rn"><b>${done}</b> из 4</div><div class="sub" style="margin:2px 0 0">видов услуг пройдено</div></div></div>
+ ${nx?`<button class="btn" id="cta">${st[nx].s==='exp'?'Повторить':'Пройти'}: ${TYPES[nx].name} →</button>`:'<div class="card" style="text-align:center;font-weight:800">Все виды услуг пройдены 🎉</div>'}
+ <div class="common"><span class="cico">${done||TK.some(k=>st[k].s==='exp')?'✓':'○'}</span><div><b>Общие правила и автоматика</b><div class="sub" style="margin:2px 0 0;font-size:13px">${done?'Пройдено в составе инструктажа':'Входит в любой вид услуг'}</div></div></div>
+ <div class="dlist">${TK.map(k=>{const x=st[k],[bt,bc]=BADGE[x.s];return`<button class="dcard" data-k="${k}"><img src="img/${TIMG[k]}" alt=""><div class="dc"><span class="badge ${bc}">${bt}</span><b>${TYPES[k].name}</b>
+ <small>${x.s==='ok'?`${fmtD(x.r.date)} · ${x.r.score}% · действует до ${fmtD(validTo(x.r))}`:x.s==='exp'?`Срок истёк ${fmtD(validTo(x.r))}`:x.s==='rec'?esc(x.why):TSUB[k]}</small></div><i class="chev">›</i></button>`}).join('')}</div></div>`);
+ $('#bk').onclick=start;nx&&($('#cta').onclick=()=>startType(nx));
+ app.querySelectorAll('.dcard').forEach(b=>b.onclick=()=>{const x=st[b.dataset.k];x.s==='ok'?cert(x.r):startType(b.dataset.k)});
+}
+function recBlock(r){const st=status(r.inn),ks=TK.filter(k=>st[k].s==='rec'||st[k].s==='exp');if(!ks.length)return'';
+ return `<div class="noprint"><h2 style="margin:28px 0 12px">Рекомендуем пройти далее</h2>${ks.map(k=>`<button class="dcard" data-go="${k}"><img src="img/${TIMG[k]}" alt=""><div class="dc"><span class="badge ${BADGE[st[k].s][1]}">${BADGE[st[k].s][0]}</span><b>${TYPES[k].name}</b><small>${esc(st[k].why||'Срок действия истёк')}</small></div><i class="chev">›</i></button>`).join('')}</div>`}
+
+new URLSearchParams(location.search).has('admin')?admin():start();
