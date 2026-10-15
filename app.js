@@ -21,15 +21,19 @@ function start(){render(`<div class="hero"><img src="img/conveyor.jpg" alt="">${
  <div class="pad"><div class="form"><label>ФИО</label><input type="text" id="fio" autocomplete="name" autocapitalize="words" enterkeyhint="next" placeholder="Иванов Иван Иванович" value="${esc(S.fio)}"><div class="err" id="e1"></div>
  <label>ИНН · 12 цифр</label><input type="text" id="inn" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="next" maxlength="12" placeholder="000000000000" value="${esc(S.inn)}"><div class="err" id="e2"></div>
  <label>Телефон</label><input type="tel" id="phone" inputmode="tel" autocomplete="tel" enterkeyhint="done" placeholder="+7 900 000-00-00" value="${esc(S.phone)}"><div class="err" id="e3"></div>
+ <label class="chk cns"><input type="checkbox" id="pdn"><span>Даю согласие на обработку персональных данных на условиях <a href="#" id="cnsopen">текста согласия</a></span></label>
+ <label class="chk cns"><input type="checkbox" id="phc"><span>Даю согласие на фотосъёмку и использование моего изображения для подтверждения личности</span></label><div class="err" id="e4"></div>
  <button class="btn" id="go">Начать инструктаж →</button></div></div>`);
  ['fio','inn','phone'].forEach((id,k,a)=>$('#'+id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();k<2?$('#'+a[k+1]).focus():$('#go').click()}}));
+ $('#cnsopen').onclick=e=>{e.preventDefault();consentModal()};
  $('#inn').oninput=e=>e.target.value=e.target.value.replace(/\D/g,'').slice(0,12);
  $('#go').onclick=()=>{const fio=$('#fio').value.trim().replace(/\s+/g,' '),inn=$('#inn').value,ph=$('#phone').value.trim();let ok=true;
   $('#e1').textContent=fio.split(' ').length<2||!/^[А-Яа-яЁёA-Za-z\- ]+$/.test(fio)?(ok=false,'Укажите фамилию и имя (и отчество при наличии)'):'';
   $('#e2').textContent=!/^\d{12}$/.test(inn)?(ok=false,'ИНН физического лица — ровно 12 цифр'):!innValid(inn)?(ok=false,'Неверная контрольная сумма ИНН — проверьте цифры'):'';
   const pd=ph.replace(/\D/g,'');$('#e3').textContent=!(pd.length===11&&/^[78]/.test(pd))&&!(pd.length===10)?(ok=false,'Введите номер в формате +7XXXXXXXXXX'):'';
+  $('#e4').textContent=!$('#pdn').checked||!$('#phc').checked?(ok=false,'Необходимо дать оба согласия — без них инструктаж пройти нельзя'):'';
   if(!ok){$('.form').classList.remove('shake');void $('.form').offsetWidth;$('.form').classList.add('shake');return}
-  S.fio=fio;S.inn=inn;S.phone='+7'+pd.slice(-10);localStorage.setItem('ot_last_inn',inn);hasHist()?dashboard():chooseType();};
+  S.fio=fio;S.inn=inn;S.phone='+7'+pd.slice(-10);S.consent={v:CONSENT_V,at:new Date().toISOString(),pdn:true,photo:true};localStorage.setItem('ot_consent_'+inn,JSON.stringify(S.consent));localStorage.setItem('ot_last_inn',inn);hasHist()?dashboard():chooseType();};
 }
 function chooseType(){render(`<div class="top"><button class="back" id="bk">←</button></div><div class="pad" style="padding-top:8px">
  <h1>Какой вид<br>услуг?</h1><p class="sub">Инструктаж и тест подберём под вид услуг, согласованный с Заказчиком.</p>
@@ -102,7 +106,7 @@ function sign(){render(`<div class="top"><button class="back" id="bk">←</butto
  $('#clr').onclick=()=>{x.clearRect(0,0,c.width,c.height);len=0;upd()};$('#agree').onchange=upd;
  done.onclick=()=>{S.sig=c.toDataURL('image/png');finish()};
 }
-function finish(){const d=new Date();const rec={id:Date.now().toString(36).toUpperCase(),fio:S.fio,inn:S.inn,phone:S.phone,type:TYPES[S.type].name,date:d.toISOString(),score:S.score*10,tries:S.tries,sig:S.sig,photo:S.photo,photoAt:S.photoAt};
+function finish(){const d=new Date();const rec={id:Date.now().toString(36).toUpperCase(),fio:S.fio,inn:S.inn,phone:S.phone,type:TYPES[S.type].name,date:d.toISOString(),score:S.score*10,tries:S.tries,sig:S.sig,photo:S.photo,photoAt:S.photoAt,consent:S.consent};
  const all=JSON.parse(localStorage.getItem(KEY)||'[]');all.push(rec);
  try{localStorage.setItem(KEY,JSON.stringify(all))}catch(e){alert('Память браузера заполнена: запись не сохранена в журнал на этом устройстве. Сообщите координатору — нужно выгрузить CSV и очистить журнал. Подтверждение ниже можно сохранить в PDF.')}cert(rec)}
 function fmtS(iso){return new Date(iso).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})}
@@ -117,14 +121,14 @@ function cert(r){render(`<div class="pad"><h1 class="noprint" style="margin-top:
  <div><span class="lbl">Дата и время</span>${fmt(r.date)}</div><div><span class="lbl">Фото сделано</span>${r.photoAt?fmtS(r.photoAt):'—'}</div><div><span class="lbl">№ записи</span>${r.id}</div>
  <div class="full"><span class="lbl">Объект · Заказчик</span>Склад «Лемана ПРО» · ООО «Персональное Решение»</div>
  <div class="full"><span class="lbl">Подпись</span><img class="sig" src="${r.sig}" alt="подпись"></div></div>
- <p class="fine">Исполнитель ознакомлен с Правилами техники безопасности и правилами нахождения на объекте (приложение к договору возмездного оказания услуг) и обязуется их соблюдать. Инструктаж на месте оказания услуг проводится координатором Заказчика / представителем объекта дополнительно.</p></div></div>
+ <p class="fine">Исполнитель ознакомлен с Правилами техники безопасности и правилами нахождения на объекте (приложение к договору возмездного оказания услуг) и обязуется их соблюдать. ${r.consent?`Согласие на обработку персональных данных и на использование изображения (версия ${esc(r.consent.v)}) дано ${fmtS(r.consent.at)}. `:''}Инструктаж на месте оказания услуг проводится координатором Заказчика / представителем объекта дополнительно.</p></div></div>
  <div class="noprint" style="margin-top:20px"><button class="btn" id="pdf">Скачать PDF</button><button class="btn ghost" id="mine">Моё обучение</button><button class="btn ghost" id="again">Выйти</button></div>
  ${recBlock(r)}</div>`);
  $('#pdf').onclick=()=>window.print();$('#again').onclick=()=>{reset();start()};$('#mine').onclick=()=>{if(!S.inn){S.inn=r.inn;S.fio=r.fio;S.phone=r.phone}dashboard()};
  app.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{if(!S.inn){S.inn=r.inn;S.fio=r.fio;S.phone=r.phone}startType(b.dataset.go)});
 }
 function admin(){app.className='wide';const all=JSON.parse(localStorage.getItem(KEY)||'[]');
- const ppl={};all.forEach(r=>{const p=ppl[r.inn]||(ppl[r.inn]={inn:r.inn,fio:r.fio,phone:r.phone,t:{},n:0,photo:false});p.fio=r.fio;p.phone=r.phone;p.n++;if(r.photo)p.photo=true;const k=keyOf(r.type);if(k&&(!p.t[k]||p.t[k].date<r.date))p.t[k]=r});
+ const ppl={};all.forEach(r=>{const p=ppl[r.inn]||(ppl[r.inn]={inn:r.inn,fio:r.fio,phone:r.phone,t:{},n:0,photo:false});p.fio=r.fio;p.phone=r.phone;p.n++;if(r.photo)p.photo=true;if(r.consent)p.cons=r.consent;const k=keyOf(r.type);if(k&&(!p.t[k]||p.t[k].date<r.date))p.t[k]=r});
  const AT=allAtt();Object.entries(AT).forEach(([key,a])=>{const [inn,k]=key.split('|');const p=ppl[inn]||(ppl[inn]={inn,fio:a.fio,phone:a.phone,t:{},n:0,photo:false});(p.a||(p.a={}))[k]=a});
  const P=Object.values(ppl);
  app.innerHTML=`<div class="pad screen"><h1>Прохождения (${all.length})</h1><p class="sub">Данные хранятся только в этом браузере (localStorage). Занято ≈ ${Math.round((localStorage.getItem(KEY)||'').length/1024)} КБ из ~5 000 КБ.</p><button class="btn" id="csv" style="max-width:260px;margin-bottom:16px">Экспорт CSV</button>
@@ -137,8 +141,8 @@ function admin(){app.className='wide';const all=JSON.parse(localStorage.getItem(
  all.slice().reverse().map(r=>`<tr><td>${r.id}</td><td>${fmt(r.date)}</td><td>${esc(r.fio)}</td><td>${r.inn}</td><td>${esc(r.phone)}</td><td>${esc(r.type)}</td><td>${r.score}%</td><td>${r.tries}</td><td>${r.photo?`<img src="${r.photo}" style="height:44px;width:44px;object-fit:cover;border-radius:12px">`:'—'}</td><td>${r.photoAt?fmtS(r.photoAt):'—'}</td><td><img src="${r.sig}" style="height:30px"></td></tr>`).join('')+`</table></div></div>`;
  app.querySelectorAll('[data-rst]').forEach(b=>b.onclick=()=>{const [i,k]=b.dataset.rst.split('|');if(confirm('Сбросить попытки: '+TYPES[k].name+'?')){delAtt(i,k);admin()}});
  $('#csv').onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const head=['ФИО','ИНН','Телефон',...TK.flatMap(k=>[TYPES[k].name+': дата',TYPES[k].name+': результат',TYPES[k].name+': действует до',TYPES[k].name+': Допуск: допущен / не допущен',TYPES[k].name+': попыток / лучший']),'Фото: есть/нет','Всего прохождений'];
-  const rows=P.map(p=>[p.fio,'\t'+p.inn,p.phone,...TK.flatMap(k=>{const r=p.t[k],a=(p.a||{})[k];const ok=r&&new Date(validTo(r))>=new Date();return[r?fmt(r.date):'',r?r.score+'%':'',r?fmtD(validTo(r)):'',a&&a.blocked?'не допущен':ok?'допущен':'',a?a.n+' / '+a.best+'%':'']}),p.photo?'есть':'нет',p.n]);
+  const head=['ФИО','ИНН','Телефон',...TK.flatMap(k=>[TYPES[k].name+': дата',TYPES[k].name+': результат',TYPES[k].name+': действует до',TYPES[k].name+': Допуск: допущен / не допущен',TYPES[k].name+': попыток / лучший']),'Фото: есть/нет','Согласие ПДн: дата/версия','Всего прохождений'];
+  const rows=P.map(p=>[p.fio,'\t'+p.inn,p.phone,...TK.flatMap(k=>{const r=p.t[k],a=(p.a||{})[k];const ok=r&&new Date(validTo(r))>=new Date();return[r?fmt(r.date):'',r?r.score+'%':'',r?fmtD(validTo(r)):'',a&&a.blocked?'не допущен':ok?'допущен':'',a?a.n+' / '+a.best+'%':'']}),p.photo?'есть':'нет',p.cons?fmtS(p.cons.at)+' / '+p.cons.v:'',p.n]);
   const csv='\ufeff'+[head,...rows].map(r=>r.map(q).join(';')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='instruktazh_'+new Date().toISOString().slice(0,10)+'.csv';a.click()};
 }
@@ -219,3 +223,16 @@ function blocked(k){const a=getAtt(S.inn,k);render(`<div class="top"><button cla
  <button class="btn ghost" id="todash">Моё обучение</button></div>`);$('#bk').onclick=$('#todash').onclick=dashboard}
 new URLSearchParams(location.search).has('admin')?admin():start();
 function hasHist(){return myRecs().length>0||Object.keys(allAtt()).some(k=>k.startsWith(S.inn+'|'))}
+
+const CONSENT_V='1.0 от 15.10.2026';
+const CONSENT_HTML=`<h2>Согласие на обработку персональных данных</h2>
+<p>Я, субъект персональных данных, в соответствии с Федеральным законом от 27.07.2006 № 152-ФЗ «О персональных данных», свободно, своей волей и в своём интересе даю согласие <b>ООО «Персональное Решение»</b> (ИНН ________, ОГРН ________, адрес: ________) (далее — Оператор) на обработку моих персональных данных на следующих условиях.</p>
+<h3>1. Перечень персональных данных</h3><p>Фамилия, имя, отчество; ИНН; номер телефона; фотографическое изображение (селфи), полученное при прохождении инструктажа; собственноручная подпись (графическое изображение); результаты тестирования, сведения о попытках, дата и время прохождения инструктажа и выдачи допуска.</p>
+<h3>2. Цели обработки</h3><p>Проведение инструктажа по технике безопасности и правилам нахождения на объекте; подтверждение личности исполнителя и факта ознакомления с Правилами; допуск к оказанию услуг по договору возмездного оказания услуг; передача сведений о допуске представителю объекта (склад «Лемана ПРО»).</p>
+<h3>3. Действия с персональными данными</h3><p>Сбор, запись, систематизация, накопление, хранение, уточнение (обновление, изменение), извлечение, использование, передача (предоставление, доступ), блокирование, удаление, уничтожение — с использованием средств автоматизации и без их использования.</p>
+<h3>4. Место хранения и трансграничная передача</h3><p>Данные хранятся в памяти моего устройства и в облачных сервисах Google (Google Таблицы, Google Диск). Серверы этих сервисов могут находиться за пределами Российской Федерации; я уведомлён(а) о возможной трансграничной передаче персональных данных и согласен(на) на неё.</p>
+<h3>5. Фотографическое изображение</h3><p>Отдельно даю согласие на фотосъёмку и использование моего изображения исключительно для подтверждения личности при прохождении инструктажа и оформлении допуска.</p>
+<h3>6. Срок действия и отзыв</h3><p>Согласие действует до истечения 3 (трёх) лет после прекращения договора возмездного оказания услуг либо до его отзыва. Согласие может быть отозвано письменным заявлением, направленным по адресу ________ или на электронную почту ________. Отзыв согласия не влияет на законность обработки, осуществлённой до отзыва; после отзыва допуск к оказанию услуг на объекте может быть невозможен.</p>
+<p class="cv">Версия текста согласия: ${CONSENT_V}</p>`;
+function consentModal(){const o=document.createElement('div');o.className='cmodal';o.innerHTML=`<div class="csheet"><button class="x2" aria-label="Закрыть">✕</button><div class="ctext">${CONSENT_HTML}</div><button class="btn" id="cnsok">Понятно</button></div>`;document.body.appendChild(o);
+ const close=()=>o.remove();o.querySelector('.x2').onclick=close;o.querySelector('#cnsok').onclick=close;o.onclick=e=>{if(e.target===o)close()}}
