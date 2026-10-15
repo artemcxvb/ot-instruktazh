@@ -154,7 +154,8 @@ function cert(r){render(`<div class="pad"><h1 class="noprint" style="margin-top:
  $('#pdf').onclick=()=>window.print();$('#again').onclick=()=>{reset();start()};$('#mine').onclick=()=>{if(!S.inn){S.inn=r.inn;S.fio=r.fio;S.phone=r.phone}dashboard()};
  app.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{if(!S.inn){S.inn=r.inn;S.fio=r.fio;S.phone=r.phone}startType(b.dataset.go)});
 }
-function admin(){app.className='wide';const all=JSON.parse(localStorage.getItem(KEY)||'[]');
+function admin(){if(API_URL)return adminSrv();adminLocal()}
+function adminLocal(){app.className='wide';const all=JSON.parse(localStorage.getItem(KEY)||'[]');
  const ppl={};all.forEach(r=>{const p=ppl[r.inn]||(ppl[r.inn]={inn:r.inn,fio:r.fio,phone:r.phone,t:{},n:0,photo:false});p.fio=r.fio;p.phone=r.phone;p.n++;if(r.photo)p.photo=true;if(r.consent)p.cons=r.consent;const k=keyOf(r.type);if(k&&(!p.t[k]||p.t[k].date<r.date))p.t[k]=r});
  const AT=allAtt();Object.entries(AT).forEach(([key,a])=>{const [inn,k]=key.split('|');const p=ppl[inn]||(ppl[inn]={inn,fio:a.fio,phone:a.phone,t:{},n:0,photo:false});(p.a||(p.a={}))[k]=a});
  const P=Object.values(ppl);
@@ -300,6 +301,48 @@ function blocked(k){const a=getAtt(S.inn,k);render(`<div class="top"><button cla
  <h1>Доступ<br>закрыт</h1>${blkCard({...a,type:TYPES[k].name})}
  <div class="card"><div class="grid" style="padding:0"><div><span class="lbl">Исполнитель</span>${esc(a.fio||S.fio)}</div><div><span class="lbl">ИНН</span>${S.inn}</div><div><span class="lbl">Попыток</span>${a.n} из ${MAXA}</div><div><span class="lbl">Лучший результат</span>${a.best}%</div><div class="full"><span class="lbl">Дата</span>${a.date?fmt(a.date):'—'}</div></div></div>
  <button class="btn ghost" id="todash">Моё обучение</button></div>`);$('#bk').onclick=$('#todash').onclick=dashboard}
+// ===== Админка из Google Таблицы (все исполнители). Пароль — отдельный от публичного токена.
+const AKP='ot_admin_pw',STN={passed:'Пройдено',expired:'Требуется повтор',blocked:'Не допущен',pending:'Ожидает подписи',progress:'В процессе',none:'—'};
+const STC={passed:'var(--ok)',expired:'#E05A00',blocked:'var(--no)',pending:'#E05A00',progress:'var(--m)',none:'var(--m)'};
+const AD={rows:null,att:[],q:'',t:'',s:''};
+function adminLogin(err){app.className='';app.innerHTML=`<div class="pad screen"><h1>Админка</h1><p class="sub">Введите пароль администратора. Он нужен, чтобы загрузить всех исполнителей из Google Таблицы.</p>
+ <input id="apw" type="password" autocomplete="current-password" placeholder="Пароль" style="width:100%;font-size:16px;padding:14px 16px;border-radius:16px;border:1px solid #E3E5EA;box-sizing:border-box">
+ <div class="err" id="aer" style="color:var(--no);margin:8px 0;font-weight:700">${err?esc(err):''}</div><button class="btn" id="ago">Войти</button>
+ <p class="sub" style="margin-top:18px"><a href="#" id="aloc" style="color:var(--m)">Показать данные только этого устройства</a></p></div>`;
+ const go=()=>{const v=$('#apw').value.trim();if(!v)return;sessionStorage.setItem(AKP,v);adminLoad()};$('#ago').onclick=go;$('#apw').onkeydown=e=>{if(e.key==='Enter')go()};$('#aloc').onclick=e=>{e.preventDefault();adminLocal()}}
+function adminSrv(){sessionStorage.getItem(AKP)?adminLoad():adminLogin()}
+async function adminLoad(){app.className='';app.innerHTML=`<div class="pad screen"><h1>Админка</h1><p class="sub">Загружаем данные из Google Таблицы… Первый запрос может занять до 40 секунд.</p><div class="spin" style="margin:30px auto;width:36px;height:36px;border:4px solid #EEF0F3;border-top-color:#FF2D87;border-radius:50%;animation:adspin 1s linear infinite"></div></div><style>@keyframes adspin{to{transform:rotate(360deg)}}</style>`;
+ let r;try{r=await api('admin_list',{admin:sessionStorage.getItem(AKP)},60000)}catch(e){r={ok:false,error:'net'}}
+ if(!r.ok){if(r.error==='bad_admin'){sessionStorage.removeItem(AKP);return adminLogin('Неверный пароль')}
+  app.innerHTML=`<div class="pad screen"><h1>Админка</h1><div class="blk"><div class="bico">⚠️</div><b>Не удалось загрузить данные с сервера</b><p>${r.error==='net'?'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.':r.error==='unknown_action'?'На сервере старая версия скрипта. Обновите код в Apps Script и сделайте «Новую версию» развертывания.':'Ошибка сервера: '+esc(r.error)}</p></div>
+  <button class="btn" id="arty" style="margin-top:14px">Повторить</button><p class="sub" style="margin-top:14px"><a href="${SHEET_URL}" target="_blank" rel="noopener" style="color:#FF2D87;font-weight:800">Открыть Google Таблицу →</a><br><a href="#" id="aloc" style="color:var(--m)">Данные только этого устройства</a></p></div>`;
+  $('#arty').onclick=adminSrv;$('#aloc').onclick=e=>{e.preventDefault();adminLocal()};return}
+ AD.rows=r.rows;AD.att=r.attempts||[];AD.max=r.max||MAXA;adminView()}
+function adFilt(){const q=AD.q.toLowerCase().trim();return AD.rows.filter(x=>(!q||String(x.fio).toLowerCase().includes(q)||x.inn.includes(q))&&(!AD.t||x.type===AD.t)&&(!AD.s||x.state.status===AD.s))}
+function adminView(){const sel='font-size:16px;padding:12px;border-radius:14px;border:1px solid #E3E5EA;background:#fff;min-width:0;flex:1';
+ const cnt=s=>AD.rows.filter(x=>x.state.status===s).length;
+ app.innerHTML=`<div class="pad screen"><h1>Исполнители</h1><p class="sub">Из Google Таблицы: ${AD.rows.length} записей · ✓ ${cnt('passed')} · ⛔ ${cnt('blocked')} · ⟳ ${cnt('expired')}<br><a href="${SHEET_URL}" target="_blank" rel="noopener" style="color:#FF2D87;font-weight:800">Открыть таблицу →</a></p>
+ <input id="aq" type="search" placeholder="Поиск по ФИО или ИНН" value="${esc(AD.q)}" style="width:100%;box-sizing:border-box;font-size:16px;padding:12px 14px;border-radius:14px;border:1px solid #E3E5EA;margin-bottom:8px">
+ <div style="display:flex;gap:8px;margin-bottom:8px"><select id="at" style="${sel}"><option value="">Все виды услуг</option>${TK.map(k=>`<option value="${k}"${AD.t===k?' selected':''}>${esc(TYPES[k].name)}</option>`).join('')}</select>
+ <select id="as" style="${sel}"><option value="">Все статусы</option>${Object.keys(STN).filter(k=>k!=='none').map(k=>`<option value="${k}"${AD.s===k?' selected':''}>${STN[k]}</option>`).join('')}</select></div>
+ <div style="display:flex;gap:8px;margin-bottom:14px"><button class="btn" id="acsv" style="flex:1">Экспорт CSV</button><button class="btn" id="arl" style="flex:1;background:#EEF0F3;color:inherit">Обновить</button></div>
+ <div id="alist"></div>
+ <h2 style="margin:22px 0 10px">Последние попытки</h2><div class="adm"><table><tr><th>Время</th><th>ФИО</th><th>ИНН</th><th>Вид</th><th>№</th><th>Балл</th><th>Результат</th></tr>${AD.att.slice(0,100).map(a=>`<tr><td>${a.at?fmt(a.at):''}</td><td>${esc(a.fio)}</td><td>${esc(a.inn)}</td><td>${esc(a.typeName)}</td><td>${esc(a.n)}</td><td>${esc(a.score)}%</td><td>${esc(a.result)}</td></tr>`).join('')}</table></div>
+ <p class="sub" style="margin-top:16px"><a href="#" id="aout" style="color:var(--m)">Выйти</a></p></div>`;
+ const list=()=>{const L=adFilt();$('#alist').innerHTML=L.length?L.map(x=>{const st=x.state,c=STC[st.status];return`<div class="card" style="margin-bottom:10px;padding:14px 16px">
+  <div style="display:flex;justify-content:space-between;gap:8px"><b style="word-break:break-word">${esc(x.fio||'—')}</b><span style="color:${c};font-weight:800;white-space:nowrap">${STN[st.status]||esc(x.sheetStatus)}</span></div>
+  <div style="color:var(--m);font-size:14px;margin:2px 0 6px">ИНН ${esc(x.inn)}${x.phone?' · '+esc(x.phone):''}<br>${esc(x.typeName)}</div>
+  <div style="font-size:14px">Попыток: <b>${st.attempts}/${AD.max}</b> · лучший: <b>${st.best}%</b>${x.passedAt?`<br>Сдал: ${fmtD(x.passedAt)} · до ${x.validTo?fmtD(x.validTo):'—'}`:''}${x.rec?` · № ${esc(x.rec)}`:''}${x.upd?`<br><small style="color:var(--m)">Обновлено ${fmt(x.upd)}</small>`:''}</div>
+  <div style="font-size:14px;margin-top:6px">${x.selfie?`<a href="${esc(x.selfie)}" target="_blank" rel="noopener" style="color:#FF2D87;font-weight:700">Селфи</a>`:'Селфи —'} · ${x.sig?`<a href="${esc(x.sig)}" target="_blank" rel="noopener" style="color:#FF2D87;font-weight:700">Подпись</a>`:'Подпись —'}</div>
+  ${(st.attempts>0||st.status==='blocked')&&x.type?`<button class="rst" data-rst="${esc(x.inn)}|${x.type}">Сбросить попытки</button>`:''}</div>`}).join(''):'<p class="sub">Никого не найдено.</p>';
+  app.querySelectorAll('[data-rst]').forEach(b=>b.onclick=async()=>{const [inn,k]=b.dataset.rst.split('|');if(!confirm('Сбросить попытки: '+TYPES[k].name+', ИНН '+inn+'?'))return;b.disabled=true;b.textContent='Сбрасываем…';
+   let r;try{r=await api('admin_reset',{admin:sessionStorage.getItem(AKP),inn,type:k},60000)}catch(e){r={ok:false,error:'net'}}
+   if(r.ok){delAtt(inn,k);const x=AD.rows.find(y=>y.inn===inn&&y.type===k);if(x)x.state=r.state;list()}else{b.disabled=false;b.textContent='Сбросить попытки';alert(r.error==='net'?NET:'Ошибка: '+r.error)}})};
+ list();$('#aq').oninput=e=>{AD.q=e.target.value;list()};$('#at').onchange=e=>{AD.t=e.target.value;list()};$('#as').onchange=e=>{AD.s=e.target.value;list()};
+ $('#arl').onclick=adminLoad;$('#aout').onclick=e=>{e.preventDefault();sessionStorage.removeItem(AKP);adminLogin()};
+ $('#acsv').onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const head=['ФИО','ИНН','Телефон','Вид услуг','Статус','Статус в таблице','Попыток','Лучший %','Дата сдачи','Действует до','№ записи','Селфи','Подпись','Согласие ПДн','Проверка лица','Обновлено'];
+  const rows=adFilt().map(x=>[x.fio,'\t'+x.inn,x.phone,x.typeName,STN[x.state.status],x.sheetStatus,x.state.attempts,x.state.best,x.passedAt?fmtD(x.passedAt):'',x.validTo?fmtD(x.validTo):'',x.rec,x.selfie,x.sig,x.cons,x.face,x.upd?fmt(x.upd):'']);
+  const blob=new Blob(['\ufeff'+[head,...rows].map(r=>r.map(q).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ispolniteli_'+new Date().toISOString().slice(0,10)+'.csv';a.click()}}
 new URLSearchParams(location.search).has('admin')?admin():start();
 function hasHist(){return myRecs().length>0||(S.srv&&Object.values(S.srv).some(t=>t.status!=='none'))||Object.keys(allAtt()).some(k=>k.startsWith(S.inn+'|'))}
 
