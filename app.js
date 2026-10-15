@@ -2,7 +2,7 @@
 const API_URL=window.OT_API_URL||'https://script.google.com/macros/s/AKfycbzW686AVecKW5PNf1oBDf62XteloBCL0jb9eInkFE44HPg1TDIC5JFvLYS5FyvaK_Tm/exec';
 const API_TOKEN='gBU-Yj7L-7h_2zGd2EXgr9Qy';
 const SHEET_URL='https://docs.google.com/spreadsheets/d/17OdCnBHpzfZOEjSBPVcRiiO3-YCbVijOL9-UIiR9KnM/edit';
-async function api(action,data){const ac=new AbortController(),t=setTimeout(()=>ac.abort(),20000);
+async function api(action,data,ms=30000){const ac=new AbortController(),t=setTimeout(()=>ac.abort(),ms);
  try{const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({token:API_TOKEN,action,...data}),redirect:'follow',signal:ac.signal});
   if(!r.ok)throw new Error('http '+r.status);return await r.json()}finally{clearTimeout(t)}}
 const NET='Нет связи, попробуйте позже';
@@ -117,11 +117,22 @@ function sign(){render(`<div class="top"><button class="back" id="bk">←</butto
  $('#clr').onclick=()=>{x.clearRect(0,0,c.width,c.height);len=0;upd()};$('#agree').onchange=upd;
  done.onclick=()=>{S.sig=c.toDataURL('image/png');finish()};done.insertAdjacentHTML('afterend','<div class="err" id="serr" style="text-align:center"></div>');
 }
-async function finish(){const d=new Date();let id=Date.now().toString(36).toUpperCase();
- if(API_URL){const b=$('#done');b.disabled=true;b.textContent='Сохраняем…';$('#serr').textContent='';
-  let r;try{r=await api('complete',{consent:S.consent,inn:S.inn,type:S.type,fio:S.fio,phone:S.phone,agree:true,photo:S.photo,photoAt:S.photoAt,sig:S.sig,recordId:id})}catch(e){r=null}
-  if(!r||!r.ok){b.disabled=false;b.textContent='Подписать';$('#serr').textContent=!r?NET:r.error==='not_passed'?'Сервер не подтвердил сдачу теста. Обратитесь к координатору Заказчика.':'Ошибка сервера: '+r.error;return}
-  id=r.recordId;if(S.srv)S.srv[S.type]={status:'passed',attempts:S.tries,best:S.score*10,passedAt:r.passedAt,validTo:r.validTo,recordId:id}}
+async function finish(){const d=new Date();S.recId=S.recId||Date.now().toString(36).toUpperCase();let id=S.recId;
+ if(API_URL){const b=$('#done'),er=$('#serr');b.disabled=true;b.textContent='Сохраняем… (до 1 минуты)';er.innerHTML='';
+  let r,netErr=false;try{r=await api('complete',{consent:S.consent,inn:S.inn,type:S.type,fio:S.fio,phone:S.phone,agree:true,photo:S.photo,photoAt:S.photoAt,sig:S.sig,recordId:id,face:S.face||null},90000)}catch(e){r=null;netErr=true}
+  // ответ мог потеряться (таймаут/обрыв), а запись на сервере уже сделана — сверяемся со статусом
+  if(!r||!r.ok){try{const st=await api('status',{inn:S.inn},45000);const t=st&&st.ok&&st.types&&st.types[S.type];
+    if(t&&t.status==='passed'&&(t.recordId===id||(t.passedAt&&Date.now()-new Date(t.passedAt)<30*60000))){syncSrv(st.types);r={ok:true,recordId:t.recordId,passedAt:t.passedAt,validTo:t.validTo}}
+    else if(t&&r&&r.error==='not_passed')r.detail=t.status}catch(e){}}
+  if(!r||!r.ok){b.disabled=false;b.textContent='Подписать';
+   const msg=!r?'Нет связи с сервером или он не ответил вовремя. Данные не потеряны — проверьте интернет и нажмите «Повторить».'
+    :r.error==='not_passed'?(r.detail==='blocked'?'Сервер не принял подпись: по этому виду услуг исчерпаны попытки (статус «Не допущен»). Обратитесь к координатору Заказчика.':r.detail==='progress'||r.detail==='none'?'Сервер не нашёл сданного теста по виду услуг «'+esc(TYPES[S.type].name)+'» для ИНН '+S.inn+'. Пройдите тест заново.':'Сервер не подтвердил сдачу теста. Нажмите «Повторить»; если ошибка повторится — обратитесь к координатору Заказчика.')
+    :r.error==='busy'?'Сервер занят другими исполнителями. Подождите несколько секунд и нажмите «Повторить».'
+    :r.error==='no_consent'?'Не найдено согласие на обработку персональных данных. Вернитесь на первый экран и отметьте согласие.'
+    :/image/.test(r.error)?'Не удалось сохранить фото или подпись. Переснимите селфи и нажмите «Повторить».'
+    :'Ошибка сервера ('+esc(r.error)+'). Нажмите «Повторить».';
+   er.innerHTML=msg+'<button class="btn ghost" id="retry" style="margin-top:10px">Повторить</button>';$('#retry').onclick=finish;return}
+  id=r.recordId;S.recId=null;if(S.srv)S.srv[S.type]={status:'passed',attempts:S.tries,best:S.score*10,passedAt:r.passedAt,validTo:r.validTo,recordId:id}}
  const rec={id,fio:S.fio,inn:S.inn,phone:S.phone,type:TYPES[S.type].name,date:d.toISOString(),score:S.score*10,tries:S.tries,sig:S.sig,photo:S.photo,photoAt:S.photoAt,consent:S.consent};
  const all=JSON.parse(localStorage.getItem(KEY)||'[]');all.push(rec);
  try{localStorage.setItem(KEY,JSON.stringify(all))}catch(e){alert('Память браузера заполнена: запись не сохранена в журнал на этом устройстве. Сообщите координатору — нужно выгрузить CSV и очистить журнал. Подтверждение ниже можно сохранить в PDF.')}cert(rec)}
@@ -167,25 +178,72 @@ function drawSelfie(){const w=$('#selfie');if(!w)return;
  w.innerHTML=S.photo?`<div class="sfrow"><img class="sfthumb" src="${S.photo}" alt=""><div><div style="font-weight:800">Фото сделано ✓</div><div class="sub" style="margin:2px 0 0;font-size:13px">${fmtS(S.photoAt)}</div><button class="btn ghost" id="sfre" style="width:auto;padding:10px 16px;font-size:14px;margin-top:8px">Переснять</button></div></div>`
  :`<button class="btn" id="sfopen">📷 Сделать селфи</button>`;
  const b=$('#sfopen')||$('#sfre');b.onclick=openCam;S.upd&&S.upd();}
-let stream=null;
-function closeCam(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}const o=$('#cam');o&&o.remove()}
+let stream=null,camLoop=0;
+const MP='./mp/';let FL=null,FLp=null;
+function loadFL(){if(FL)return Promise.resolve(FL);if(FLp)return FLp;
+ FLp=(async()=>{const m=await import(MP+'vision_bundle.mjs');const fs=await m.FilesetResolver.forVisionTasks(MP+'wasm');
+  const mk=d=>m.FaceLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:MP+'face_landmarker.task',delegate:d},runningMode:'VIDEO',numFaces:2,outputFaceBlendshapes:true,minFaceDetectionConfidence:.6,minFacePresenceConfidence:.6});
+  try{FL=await mk('GPU')}catch(e){FL=await mk('CPU')}return FL})();
+ FLp.catch(()=>{FLp=null});return FLp}
+let lastTs=0;function fts(){let t=performance.now();if(t<=lastTs)t=lastTs+1;lastTs=t;return t}
+// оценка лица в кадре 3:4 (кроп по центру, как при съёмке)
+function faceEval(res,vw,vh){const n=res&&res.faceLandmarks?res.faceLandmarks.length:0;if(n===0)return{ok:false,code:'none'};if(n>1)return{ok:false,code:'many'};
+ const L=res.faceLandmarks[0];let x0=1,x1=0,y0=1,y1=0;L.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y)});
+ let cw=vw,ch=vh;if(vw/vh>3/4)cw=vh*3/4;else ch=vw*4/3;const ox=(vw-cw)/2/vw,oy=(vh-ch)/2/vh,sx=vw/cw,sy=vh/ch;
+ const fx0=(x0-ox)*sx,fx1=(x1-ox)*sx,fy0=(y0-oy)*sy,fy1=(y1-oy)*sy,w=fx1-fx0,cx=(fx0+fx1)/2,cy=(fy0+fy1)/2;
+ const bs={};(res.faceBlendshapes&&res.faceBlendshapes[0]?res.faceBlendshapes[0].categories:[]).forEach(c=>bs[c.categoryName]=c.score);
+ const blink=Math.min(bs.eyeBlinkLeft||0,bs.eyeBlinkRight||0);const a=L[234],b=L[454],nz=L[1];const yaw=(nz.x-a.x)/((b.x-a.x)||1e-6);
+ const r={w,cx,cy,blink,yaw};
+ if(w<.25)return{...r,ok:false,code:'far'};if(w>.9)return{...r,ok:false,code:'near'};
+ if(Math.abs(cx-.5)>.17||Math.abs(cy-.45)>.2)return{...r,ok:false,code:'center'};return{...r,ok:true,code:'ok'}}
+const HINT={none:'Поместите лицо в овал',many:'В кадре должно быть одно лицо',far:'Подойдите ближе',near:'Отодвиньте телефон чуть дальше',center:'Поместите лицо в центр овала'};
+function closeCam(){cancelAnimationFrame(camLoop);camLoop=0;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}const o=$('#cam');o&&o.remove()}
 async function openCam(){closeCam();const o=document.createElement('div');o.id='cam';o.className='cam';document.body.appendChild(o);
- o.innerHTML=`<video id="vf" playsinline autoplay muted></video><div class="oval"></div><div class="camtop"><button class="x" id="camx">✕</button></div>
- <div class="camhint" id="camhint">Поместите лицо в овал</div><div class="cambot"><button class="shutter" id="shot" disabled aria-label="Сделать фото"></button><div class="shl">Сделать фото</div></div>`;
+ o.innerHTML=`<video id="vf" playsinline autoplay muted></video><div class="oval" id="oval"></div><div class="camtop"><button class="x" id="camx">✕</button></div>
+ <div class="camhint" id="camhint">Включаем камеру…</div><div class="cambot"><div class="livebar"><i id="livefill"></i></div><button class="shutter" id="shot" disabled aria-label="Сделать фото"></button><div class="shl" id="shl">Фото сделается автоматически</div></div>`;
  $('#camx').onclick=closeCam;
- const fail=(msg)=>{o.innerHTML=`<div class="camerr"><div style="font-size:54px">📷</div><h2>Камера недоступна</h2><p>${msg}</p><p class="small">Камера работает только при открытии приложения по защищённому адресу <b>https://</b> или с <b>localhost</b>. Разрешите доступ к камере в настройках браузера и нажмите «Попробовать снова».</p><button class="btn" id="camretry">Попробовать снова</button><button class="btn glass" id="camclose">Закрыть</button></div>`;
+ const fail=(msg,title='Камера недоступна',extra='<p class="small">Камера работает только при открытии приложения по защищённому адресу <b>https://</b>. Разрешите доступ к камере в настройках браузера и нажмите «Попробовать снова».</p>')=>{cancelAnimationFrame(camLoop);if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+  o.innerHTML=`<div class="camerr"><div style="font-size:54px">📷</div><h2>${title}</h2><p>${msg}</p>${extra}<button class="btn" id="camretry">Попробовать снова</button><button class="btn glass" id="camclose">Закрыть</button></div>`;
   $('#camretry').onclick=openCam;$('#camclose').onclick=closeCam};
  if(!window.isSecureContext||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){fail('Браузер не даёт доступ к камере на этой странице.');return}
+ const hint=$('#camhint');
+ const flP=loadFL();
  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:720},height:{ideal:960}},audio:false})}
  catch(e){fail(e&&e.name==='NotAllowedError'?'Доступ к камере запрещён.':e&&e.name==='NotFoundError'?'На устройстве не найдена камера.':e&&e.name==='NotReadableError'?'Камера занята другим приложением.':e&&(e.name==='SecurityError'||e.name==='NotSupportedError')?'Браузер заблокировал доступ к камере.':'Не удалось включить камеру ('+esc(e&&e.name||e)+').');return}
  const v=$('#vf');if(!v){closeCam();return}v.srcObject=stream;
- v.onloadedmetadata=()=>{v.play();$('#shot').disabled=false};
- $('#shot').onclick=()=>{const W=480,vw=v.videoWidth,vh=v.videoHeight,H=Math.round(W*4/3);const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+ await new Promise(r=>{if(v.readyState>=1)r();else v.onloadedmetadata=r});try{await v.play()}catch(e){}
+ hint.textContent='Загружаем распознавание лица…';
+ let fl;try{fl=await Promise.race([flP,new Promise((_,j)=>setTimeout(()=>j(new Error('timeout')),45000))])}
+ catch(e){fail('Не удалось загрузить модуль распознавания лица. Проверьте интернет и попробуйте снова.','Нет распознавания лица','');return}
+ if(!$('#cam'))return;
+ const oval=$('#oval'),shot=$('#shot'),fill=$('#livefill'),shl=$('#shl');
+ // фазы: align → live (моргнуть/повернуть) → hold (смотрим прямо) → снимок
+ let bmin=1,phase='align',goodSince=0,base=null,eyesOpen=false,live=null,lastV=-1,lastE=null;
+ const capture=async()=>{if(!stream)return;cancelAnimationFrame(camLoop);
+  const W=480,vw=v.videoWidth,vh=v.videoHeight,H=Math.round(W*4/3);const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
   const sr=W/H;let sw=vw,sh=vw/sr;if(sh>vh){sh=vh;sw=vh*sr}x.translate(W,0);x.scale(-1,1);x.drawImage(v,(vw-sw)/2,(vh-sh)/2,sw,sh,0,0,W,H);
-  const url=c.toDataURL('image/jpeg',.7);o.querySelector('.flash')||o.insertAdjacentHTML('beforeend','<div class="flash"></div>');
+  // повторная проверка снимка
+  let chk;try{chk=faceEval(fl.detectForVideo(c,fts()),W,H)}catch(e){chk={ok:false,code:'none'}}
+  if(!chk.ok){phase='align';live=null;goodSince=0;hint.textContent='Лицо на снимке не найдено — '+(HINT[chk.code]||HINT.none).toLowerCase();fill.style.width='0';camLoop=requestAnimationFrame(tick);return}
+  const url=c.toDataURL('image/jpeg',.7);const face={ok:true,live,w:Math.round(chk.w*100)/100,at:new Date().toISOString()};
   if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
-  o.innerHTML=`<img class="prev" src="${url}" alt=""><div class="oval"></div><div class="cambot two"><button class="btn glass" id="retake">Переснять</button><button class="btn" id="usep">Использовать фото</button></div>`;
-  $('#retake').onclick=openCam;$('#usep').onclick=()=>{S.photo=url;S.photoAt=new Date().toISOString();closeCam();drawSelfie()}};
+  o.innerHTML=`<img class="prev" src="${url}" alt=""><div class="oval good"></div><div class="camhint">Лицо распознано ✓</div><div class="cambot two"><button class="btn glass" id="retake">Переснять</button><button class="btn" id="usep">Использовать фото</button></div>`;
+  $('#retake').onclick=openCam;$('#usep').onclick=()=>{S.photo=url;S.photoAt=new Date().toISOString();S.face=face;closeCam();drawSelfie()}};
+ shot.onclick=()=>{if(phase==='hold')capture()};
+ const tick=()=>{if(!stream||!$('#cam'))return;camLoop=requestAnimationFrame(tick);
+  if(v.readyState<2||v.currentTime===lastV)return;lastV=v.currentTime;
+  let e;try{e=faceEval(fl.detectForVideo(v,fts()),v.videoWidth,v.videoHeight)}catch(err){return}lastE=e;window.__face=e;
+  const now=performance.now();oval.classList.toggle('good',e.ok);oval.classList.toggle('bad',!e.ok&&e.code!=='none');
+  if(!e.ok){shot.disabled=true;goodSince=0;if(phase!=='live'||e.code==='none'||e.code==='many'){phase='align';base=null;eyesOpen=false;fill.style.width='0'}hint.textContent=HINT[e.code];shl.textContent='Фото сделается автоматически';return}
+  if(phase==='align'){if(!goodSince)goodSince=now;hint.textContent='Отлично, не двигайтесь…';fill.style.width=Math.min(30,(now-goodSince)/600*30)+'%';if(now-goodSince>600){phase='live';base=e.yaw;eyesOpen=false;bmin=1}return}
+  if(phase==='live'){hint.textContent='Моргните или медленно поверните голову';fill.style.width='45%';
+   bmin=Math.min(bmin,e.blink);if(e.blink<.4)eyesOpen=true;window.__bmax=Math.max(window.__bmax||0,e.blink);
+   if(eyesOpen&&e.blink>Math.max(.45,bmin+.25))live='blink';else if(Math.abs(e.yaw-base)>.13)live='turn';
+   if(live){phase='hold';goodSince=0}return}
+  if(phase==='hold'){hint.textContent='Смотрите прямо в камеру';shot.disabled=false;shl.textContent='Сделать фото';
+   const straight=Math.abs(e.yaw-base)<.08&&e.blink<Math.max(.4,bmin+.15);if(!straight){goodSince=0;fill.style.width='70%';return}
+   if(!goodSince)goodSince=now;fill.style.width=(70+Math.min(30,(now-goodSince)/500*30))+'%';if(now-goodSince>500){phase='shot';capture()}}};
+ hint.textContent=HINT.none;camLoop=requestAnimationFrame(tick);
 }
 
 // keyboard handling (iOS Safari / in-app browsers)
@@ -214,7 +272,7 @@ function status(inn=S.inn){const recs=myRecs(inn),now=new Date(),st={};
  TK.forEach(k=>{if(st[k]&&st[k].s==='ok')(REC[k]||[]).forEach(([t,why])=>{if(!st[t])st[t]={s:'rec',why}})});
  TK.forEach(k=>{if(!st[k])st[k]={s:'none'}});return st}
 function nextRec(st){return TK.find(k=>st[k].s==='exp')||TK.find(k=>st[k].s==='rec')||TK.find(k=>st[k].s==='none')}
-function startType(k){if(getAtt(S.inn,k).blocked){S.type=k;blocked(k);return}S.type=k;S.slides=[...COMMON_BEFORE,...SPECIFIC[k],...COMMON_AFTER];S.i=0;S.maxRead=-1;S.photo=null;S.photoAt=null;S.sig=null;S.tries=getAtt(S.inn,k).n;slide()}
+function startType(k){if(getAtt(S.inn,k).blocked){S.type=k;blocked(k);return}S.type=k;S.slides=[...COMMON_BEFORE,...SPECIFIC[k],...COMMON_AFTER];S.i=0;S.maxRead=-1;S.photo=null;S.photoAt=null;S.sig=null;S.face=null;S.recId=null;S.tries=getAtt(S.inn,k).n;slide()}
 const BADGE={blk:['Не допущен','b-exp'],ok:['Пройдено ✓','b-ok'],rec:['Рекомендовано','b-rec'],exp:['Требуется повтор','b-exp'],none:['Не пройдено','b-none']};
 function dashboard(){const st=status(),done=TK.filter(k=>st[k].s==='ok').length,nx=nextRec(st),C=2*Math.PI*44;
  render(`<div class="top"><button class="back" id="bk">←</button><div style="margin-left:auto;font-weight:700;color:var(--m);font-size:13px;text-align:right">${esc(S.fio)}<br>ИНН ${S.inn}</div></div>
