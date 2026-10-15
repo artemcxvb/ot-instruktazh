@@ -15,10 +15,11 @@ function start(){render(`<div class="hero"><img src="img/conveyor.jpg" alt="">${
  <h1 class="mega">Безопасность<br><em>начинается с тебя</em></h1>
  <p>Инструктаж для исполнителей (самозанятых) ООО «Персональное Решение» на складе «Лемана ПРО».</p>
  <div class="chips"><span>⏱ ~15 минут</span><span>📝 10 вопросов</span><span>✍️ Подпись</span></div></div></div>
- <div class="pad"><div class="form"><label>ФИО</label><input type="text" id="fio" autocomplete="name" placeholder="Иванов Иван Иванович" value="${esc(S.fio)}"><div class="err" id="e1"></div>
- <label>ИНН · 12 цифр</label><input type="tel" id="inn" inputmode="numeric" maxlength="12" placeholder="000000000000" value="${esc(S.inn)}"><div class="err" id="e2"></div>
- <label>Телефон</label><input type="tel" id="phone" inputmode="tel" placeholder="+7 900 000-00-00" value="${esc(S.phone)}"><div class="err" id="e3"></div>
+ <div class="pad"><div class="form"><label>ФИО</label><input type="text" id="fio" autocomplete="name" autocapitalize="words" enterkeyhint="next" placeholder="Иванов Иван Иванович" value="${esc(S.fio)}"><div class="err" id="e1"></div>
+ <label>ИНН · 12 цифр</label><input type="text" id="inn" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="next" maxlength="12" placeholder="000000000000" value="${esc(S.inn)}"><div class="err" id="e2"></div>
+ <label>Телефон</label><input type="tel" id="phone" inputmode="tel" autocomplete="tel" enterkeyhint="done" placeholder="+7 900 000-00-00" value="${esc(S.phone)}"><div class="err" id="e3"></div>
  <button class="btn" id="go">Начать инструктаж →</button></div></div>`);
+ ['fio','inn','phone'].forEach((id,k,a)=>$('#'+id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();k<2?$('#'+a[k+1]).focus():$('#go').click()}}));
  $('#inn').oninput=e=>e.target.value=e.target.value.replace(/\D/g,'').slice(0,12);
  $('#go').onclick=()=>{const fio=$('#fio').value.trim().replace(/\s+/g,' '),inn=$('#inn').value,ph=$('#phone').value.trim();let ok=true;
   $('#e1').textContent=fio.split(' ').length<2||!/^[А-Яа-яЁёA-Za-z\- ]+$/.test(fio)?(ok=false,'Укажите фамилию и имя (и отчество при наличии)'):'';
@@ -149,3 +150,12 @@ async function openCam(){closeCam();const o=document.createElement('div');o.id='
   o.innerHTML=`<img class="prev" src="${url}" alt=""><div class="oval"></div><div class="cambot two"><button class="btn glass" id="retake">Переснять</button><button class="btn" id="usep">Использовать фото</button></div>`;
   $('#retake').onclick=openCam;$('#usep').onclick=()=>{S.photo=url;S.photoAt=new Date().toISOString();closeCam();drawSelfie()}};
 }
+
+// keyboard handling (iOS Safari / in-app browsers)
+(function(){let fe=null,t;const vv=window.visualViewport;
+ const center=()=>{if(!fe||!document.contains(fe))return;fe.scrollIntoView({block:'center',behavior:'smooth'})};
+ const sync=()=>{if(vv)document.documentElement.style.setProperty('--vvh',vv.height+'px');const kb=vv?(innerHeight-vv.height>120):!!fe;document.body.classList.toggle('kbopen',!!fe||kb)};
+ document.addEventListener('focusin',e=>{if(!e.target.matches('input[type=text],input[type=tel]'))return;fe=e.target;document.body.classList.add('kbopen');clearTimeout(t);t=setTimeout(center,300)});
+ document.addEventListener('focusout',e=>{if(e.target===fe){fe=null;setTimeout(()=>{if(!fe)document.body.classList.remove('kbopen')},150)}});
+ vv&&vv.addEventListener('resize',()=>{sync();clearTimeout(t);t=setTimeout(center,120)});
+})();
