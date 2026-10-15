@@ -29,7 +29,7 @@ function start(){render(`<div class="hero"><img src="img/conveyor.jpg" alt="">${
   $('#e2').textContent=!/^\d{12}$/.test(inn)?(ok=false,'ИНН физического лица — ровно 12 цифр'):!innValid(inn)?(ok=false,'Неверная контрольная сумма ИНН — проверьте цифры'):'';
   const pd=ph.replace(/\D/g,'');$('#e3').textContent=!(pd.length===11&&/^[78]/.test(pd))&&!(pd.length===10)?(ok=false,'Введите номер в формате +7XXXXXXXXXX'):'';
   if(!ok){$('.form').classList.remove('shake');void $('.form').offsetWidth;$('.form').classList.add('shake');return}
-  S.fio=fio;S.inn=inn;S.phone='+7'+pd.slice(-10);localStorage.setItem('ot_last_inn',inn);myRecs().length?dashboard():chooseType();};
+  S.fio=fio;S.inn=inn;S.phone='+7'+pd.slice(-10);localStorage.setItem('ot_last_inn',inn);hasHist()?dashboard():chooseType();};
 }
 function chooseType(){render(`<div class="top"><button class="back" id="bk">←</button></div><div class="pad" style="padding-top:8px">
  <h1>Какой вид<br>услуг?</h1><p class="sub">Инструктаж и тест подберём под вид услуг, согласованный с Заказчиком.</p>
@@ -54,7 +54,7 @@ function slide(dir=1){clearTimeout(timer);const s=S.slides[S.i],n=S.slides.lengt
  if(!read)timer=setTimeout(()=>{S.maxRead=Math.max(S.maxRead,S.i);nx.disabled=false;nx.textContent=S.i<n-1?'Далее →':'К тесту →'},READ*1000);
  const fwd=()=>{if(nx.disabled){nx.animate([{transform:'scale(1)'},{transform:'scale(1.05)'},{transform:'scale(1)'}],{duration:300});return}if(S.i<n-1){S.i++;slide(1)}else startTest()};
  const bwd=()=>{if(S.i>0){S.i--;slide(-1)}};
- nx.onclick=fwd;$('#prev').onclick=bwd;$('#tr').onclick=fwd;$('#tl').onclick=bwd;$('#cls').onclick=()=>myRecs().length?dashboard():chooseType();
+ nx.onclick=fwd;$('#prev').onclick=bwd;$('#tr').onclick=fwd;$('#tl').onclick=bwd;$('#cls').onclick=()=>hasHist()?dashboard():chooseType();
  const st=$('#story'),sc=st.querySelector('.scontent');let x0=null,y0=0;
  st.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;x0=e.clientX;y0=e.clientY});
  st.addEventListener('pointermove',e=>{if(x0===null)return;const dx=e.clientX-x0;if(Math.abs(dx)>Math.abs(e.clientY-y0))sc.style.transform=`translateX(${dx*.35}px)`});
@@ -63,9 +63,9 @@ function slide(dir=1){clearTimeout(timer);const s=S.slides[S.i],n=S.slides.lengt
  st.addEventListener('pointerup',end);st.addEventListener('pointercancel',()=>{x0=null;sc.style.transform=''});
 }
 function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-function startTest(){S.qs=shuffle([...shuffle(Q_COMMON).slice(0,5),...Q_SPEC[S.type]]).map(q=>{const o=shuffle(q.a.map((t,j)=>({t,r:j===q.c})));return{...q,a:o.map(x=>x.t),c:o.findIndex(x=>x.r)}});S.ans=Array(10).fill(null);S.qi=0;S.tries++;question()}
+function startTest(){S.qs=shuffle([...shuffle(Q_COMMON).slice(0,5),...Q_SPEC[S.type]]).map(q=>{const o=shuffle(q.a.map((t,j)=>({t,r:j===q.c})));return{...q,a:o.map(x=>x.t),c:o.findIndex(x=>x.r)}});S.ans=Array(10).fill(null);S.qi=0;const at=getAtt(S.inn,S.type);if(at.blocked){blocked(S.type);return}S.tries=at.n+1;question()}
 function question(){const i=S.qi,q=S.qs[i];
- render(`<div class="qhead"><div class="top"><button class="back" id="bk">←</button><div class="qn" style="margin-left:6px">Вопрос ${i+1} из 10</div><div style="margin-left:auto;font-weight:800;color:var(--m);font-size:14px">Попытка ${S.tries}</div></div>
+ render(`<div class="qhead"><div class="top"><button class="back" id="bk">←</button><div class="qn" style="margin-left:6px">Вопрос ${i+1} из 10</div><div style="margin-left:auto;font-weight:800;color:var(--m);font-size:14px">Попытка ${S.tries} из ${MAXA}<br><span style="color:#E05A00">Осталось пересдач: ${MAXA-S.tries}</span></div></div>
  <div class="qbar">${S.qs.map((_,j)=>`<span class="${j<=i?'on':''}"></span>`).join('')}</div></div><div class="pad" style="padding-top:4px"><div class="qq">${esc(q.q)}</div>
  <div>${q.a.map((a,j)=>`<button class="opt${S.ans[i]===j?' sel':''}" data-a="${j}"><span class="k">${'АБВГ'[j]}</span>${esc(a)}</button>`).join('')}</div>
  <div class="dock"><button class="btn" id="qn" ${S.ans[i]===null?'disabled':''}>${i<9?'Следующий вопрос →':'Проверить ответы'}</button></div></div>`);
@@ -73,12 +73,14 @@ function question(){const i=S.qi,q=S.qs[i];
  app.querySelectorAll('.opt').forEach(o=>o.onclick=()=>{S.ans[i]=+o.dataset.a;app.querySelectorAll('.opt').forEach(x=>x.classList.toggle('sel',x===o));$('#qn').disabled=false});
  $('#qn').onclick=()=>{if(i<9){S.qi++;question()}else check()};
 }
-function check(){S.score=S.qs.filter((q,i)=>S.ans[i]===q.c).length;const pass=S.score>=8;
+function check(){S.score=S.qs.filter((q,i)=>S.ans[i]===q.c).length;const pass=S.score>=PASS;const at=getAtt(S.inn,S.type);at.n=S.tries;at.best=Math.max(at.best||0,S.score*10);at.fio=S.fio;at.phone=S.phone;at.type=TYPES[S.type].name;at.date=new Date().toISOString();
+ if(pass)delAtt(S.inn,S.type);else{if(at.n>=MAXA)at.blocked=true;setAtt(S.inn,S.type,at)}const left=MAXA-S.tries,blk=!pass&&left<=0;
  render(`<div class="pad"><div class="res ${pass?'pass':'fail'}"><div class="score">${S.score*10}%</div><div style="font-weight:800;font-size:20px;margin-top:6px">${pass?'Тест сдан! 🎉':'Пока не сдан'}</div>
- <div style="opacity:.85;margin-top:6px;font-size:14px">${S.score} из 10 правильных${pass?'':' · нужно 80%. Изучите пояснения и попробуйте снова.'}</div></div>
- <div class="dock" style="position:static;background:none">${pass?`<button class="btn" id="tosign">Подписать лист ознакомления →</button>`:`<div class="row"><button class="btn ghost" id="rev">Правила</button><button class="btn" id="retry">Пройти тест заново</button></div>`}</div>
+ <div style="opacity:.85;margin-top:6px;font-size:14px">${S.score} из 10 правильных${pass?'':(blk?' · нужно 90% (9 из 10).':' · нужно 90% (9 из 10). Изучите пояснения и попробуйте снова.')}</div><div class="left">${pass?'':blk?'Попытки исчерпаны':'Осталось пересдач: '+left}</div></div>
+ ${blk?blkCard(at):''}
+ <div class="dock" style="position:static;background:none">${pass?`<button class="btn" id="tosign">Подписать лист ознакомления →</button>`:(blk?`<button class="btn ghost" id="todash">Моё обучение</button>`:`<div class="row"><button class="btn ghost" id="rev">Правила</button><button class="btn" id="retry">Пройти тест заново</button></div>`)}</div>
  ${S.qs.map((q,i)=>`<div class="rcard"><div class="qn">Вопрос ${i+1} ${S.ans[i]===q.c?'· ✓':'· ✕'}</div><div class="qq">${esc(q.q)}</div>${q.a.map((a,j)=>`<div class="opt ${j===q.c?'right':(j===S.ans[i]?'wrong':'')}"><span class="k">${j===q.c?'✓':j===S.ans[i]?'✕':'АБВГ'[j]}</span>${esc(a)}</div>`).join('')}${S.ans[i]!==q.c?`<div class="expl">💡 ${esc(q.e)}</div>`:''}</div>`).join('')}</div>`);
- if(pass){$('#tosign').onclick=sign;confetti()}else{$('#retry').onclick=startTest;$('#rev').onclick=()=>{S.i=0;slide()};$('.res').classList.add('shake')}
+ if(pass){$('#tosign').onclick=sign;confetti()}else if(blk){$('#todash').onclick=dashboard;$('.res').classList.add('shake')}else{$('#retry').onclick=startTest;$('#rev').onclick=()=>{S.i=0;slide()};$('.res').classList.add('shake')}
 }
 function confetti(){const c=$('#confetti'),x=c.getContext('2d'),W=c.width=innerWidth,H=c.height=innerHeight;const cols=['#FF6B00','#FF2D87','#16C47F','#FFD23F','#7C5CFF'];
  const P=Array.from({length:140},()=>({x:W/2,y:H*.3,vx:(Math.random()-.5)*14,vy:Math.random()*-14-4,s:Math.random()*8+4,r:Math.random()*6,c:cols[Math.random()*5|0]}));let t=0;
@@ -123,14 +125,20 @@ function cert(r){render(`<div class="pad"><h1 class="noprint" style="margin-top:
 }
 function admin(){app.className='wide';const all=JSON.parse(localStorage.getItem(KEY)||'[]');
  const ppl={};all.forEach(r=>{const p=ppl[r.inn]||(ppl[r.inn]={inn:r.inn,fio:r.fio,phone:r.phone,t:{},n:0,photo:false});p.fio=r.fio;p.phone=r.phone;p.n++;if(r.photo)p.photo=true;const k=keyOf(r.type);if(k&&(!p.t[k]||p.t[k].date<r.date))p.t[k]=r});
+ const AT=allAtt();Object.entries(AT).forEach(([key,a])=>{const [inn,k]=key.split('|');const p=ppl[inn]||(ppl[inn]={inn,fio:a.fio,phone:a.phone,t:{},n:0,photo:false});(p.a||(p.a={}))[k]=a});
  const P=Object.values(ppl);
  app.innerHTML=`<div class="pad screen"><h1>Прохождения (${all.length})</h1><p class="sub">Данные хранятся только в этом браузере (localStorage). Занято ≈ ${Math.round((localStorage.getItem(KEY)||'').length/1024)} КБ из ~5 000 КБ.</p><button class="btn" id="csv" style="max-width:260px;margin-bottom:16px">Экспорт CSV</button>
- <h2 style="margin:6px 0 10px">По исполнителям (${P.length})</h2><div class="adm" style="margin-bottom:24px"><table id="ppl"><tr><th>ФИО</th><th>ИНН</th><th>Телефон</th>${TK.map(k=>`<th>${TYPES[k].name}</th>`).join('')}<th>Фото</th></tr>${P.map(p=>`<tr><td>${esc(p.fio)}</td><td>${p.inn}</td><td>${esc(p.phone)}</td>${TK.map(k=>{const r=p.t[k];if(!r)return'<td>—</td>';const exp=new Date(validTo(r))<new Date();return`<td style="color:${exp?'var(--no)':'var(--ok)'};font-weight:700">${exp?'⟳':'✓'} ${fmtD(r.date)} · ${r.score}%</td>`}).join('')}<td>${p.photo?'есть':'нет'}</td></tr>`).join('')}</table></div>
+ <h2 style="margin:6px 0 10px">По исполнителям (${P.length})</h2><div class="adm" style="margin-bottom:24px"><table id="ppl"><tr><th>ФИО</th><th>ИНН</th><th>Телефон</th>${TK.map(k=>`<th>${TYPES[k].name}</th>`).join('')}<th>Фото</th></tr>${P.map(p=>`<tr><td>${esc(p.fio)}</td><td>${p.inn}</td><td>${esc(p.phone)}</td>${TK.map(k=>{const r=p.t[k],a=(p.a||{})[k];let h='—',col='inherit';
+  if(a&&a.blocked){h=`⛔ Не допущен · ${a.n} попыт. · лучший ${a.best}%`;col='var(--no)'}
+  else if(r){const exp=new Date(validTo(r))<new Date();h=`${exp?'⟳':'✓'} ${fmtD(r.date)} · ${r.score}%`;col=exp?'var(--no)':'var(--ok)'}
+  if(a&&!a.blocked)h+=`<br><small style="color:var(--m)">попыток: ${a.n}/${MAXA}</small>`;
+  return`<td style="color:${col};font-weight:700">${h}${a?`<br><button class="rst" data-rst="${p.inn}|${k}">Сбросить попытки</button>`:''}</td>`}).join('')}<td>${p.photo?'есть':'нет'}</td></tr>`).join('')}</table></div>
  <h2 style="margin:6px 0 10px">Все прохождения (${all.length})</h2><div class="adm"><table><tr><th>№</th><th>Дата</th><th>ФИО</th><th>ИНН</th><th>Телефон</th><th>Вид услуг</th><th>Результат</th><th>Попыток</th><th>Фото</th><th>Время фото</th><th>Подпись</th></tr>`+
  all.slice().reverse().map(r=>`<tr><td>${r.id}</td><td>${fmt(r.date)}</td><td>${esc(r.fio)}</td><td>${r.inn}</td><td>${esc(r.phone)}</td><td>${esc(r.type)}</td><td>${r.score}%</td><td>${r.tries}</td><td>${r.photo?`<img src="${r.photo}" style="height:44px;width:44px;object-fit:cover;border-radius:12px">`:'—'}</td><td>${r.photoAt?fmtS(r.photoAt):'—'}</td><td><img src="${r.sig}" style="height:30px"></td></tr>`).join('')+`</table></div></div>`;
+ app.querySelectorAll('[data-rst]').forEach(b=>b.onclick=()=>{const [i,k]=b.dataset.rst.split('|');if(confirm('Сбросить попытки: '+TYPES[k].name+'?')){delAtt(i,k);admin()}});
  $('#csv').onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const head=['ФИО','ИНН','Телефон',...TK.flatMap(k=>[TYPES[k].name+': дата',TYPES[k].name+': результат',TYPES[k].name+': действует до']),'Фото: есть/нет','Всего прохождений'];
-  const rows=P.map(p=>[p.fio,'\t'+p.inn,p.phone,...TK.flatMap(k=>{const r=p.t[k];return r?[fmt(r.date),r.score+'%',fmtD(validTo(r))]:['','','']}),p.photo?'есть':'нет',p.n]);
+  const head=['ФИО','ИНН','Телефон',...TK.flatMap(k=>[TYPES[k].name+': дата',TYPES[k].name+': результат',TYPES[k].name+': действует до',TYPES[k].name+': Допуск: допущен / не допущен',TYPES[k].name+': попыток / лучший']),'Фото: есть/нет','Всего прохождений'];
+  const rows=P.map(p=>[p.fio,'\t'+p.inn,p.phone,...TK.flatMap(k=>{const r=p.t[k],a=(p.a||{})[k];const ok=r&&new Date(validTo(r))>=new Date();return[r?fmt(r.date):'',r?r.score+'%':'',r?fmtD(validTo(r)):'',a&&a.blocked?'не допущен':ok?'допущен':'',a?a.n+' / '+a.best+'%':'']}),p.photo?'есть':'нет',p.n]);
   const csv='\ufeff'+[head,...rows].map(r=>r.map(q).join(';')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='instruktazh_'+new Date().toISOString().slice(0,10)+'.csv';a.click()};
 }
@@ -177,11 +185,12 @@ function fmtD(iso){return new Date(iso).toLocaleDateString('ru-RU',{day:'2-digit
 function myRecs(inn=S.inn){return JSON.parse(localStorage.getItem(KEY)||'[]').filter(r=>r.inn===inn)}
 function status(inn=S.inn){const recs=myRecs(inn),now=new Date(),st={};
  TK.forEach(k=>{const r=recs.filter(x=>keyOf(x.type)===k).sort((a,b)=>a.date<b.date?1:-1)[0];if(r)st[k]={s:new Date(validTo(r))<now?'exp':'ok',r}});
+ TK.forEach(k=>{const a=getAtt(inn,k);if(a.blocked&&!(st[k]&&st[k].s==='ok'))st[k]={s:'blk',a}});
  TK.forEach(k=>{if(st[k]&&st[k].s==='ok')(REC[k]||[]).forEach(([t,why])=>{if(!st[t])st[t]={s:'rec',why}})});
  TK.forEach(k=>{if(!st[k])st[k]={s:'none'}});return st}
 function nextRec(st){return TK.find(k=>st[k].s==='exp')||TK.find(k=>st[k].s==='rec')||TK.find(k=>st[k].s==='none')}
-function startType(k){S.type=k;S.slides=[...COMMON_BEFORE,...SPECIFIC[k],...COMMON_AFTER];S.i=0;S.maxRead=-1;S.photo=null;S.photoAt=null;S.sig=null;S.tries=0;slide()}
-const BADGE={ok:['Пройдено ✓','b-ok'],rec:['Рекомендовано','b-rec'],exp:['Требуется повтор','b-exp'],none:['Не пройдено','b-none']};
+function startType(k){if(getAtt(S.inn,k).blocked){S.type=k;blocked(k);return}S.type=k;S.slides=[...COMMON_BEFORE,...SPECIFIC[k],...COMMON_AFTER];S.i=0;S.maxRead=-1;S.photo=null;S.photoAt=null;S.sig=null;S.tries=getAtt(S.inn,k).n;slide()}
+const BADGE={blk:['Не допущен','b-exp'],ok:['Пройдено ✓','b-ok'],rec:['Рекомендовано','b-rec'],exp:['Требуется повтор','b-exp'],none:['Не пройдено','b-none']};
 function dashboard(){const st=status(),done=TK.filter(k=>st[k].s==='ok').length,nx=nextRec(st),C=2*Math.PI*44;
  render(`<div class="top"><button class="back" id="bk">←</button><div style="margin-left:auto;font-weight:700;color:var(--m);font-size:13px;text-align:right">${esc(S.fio)}<br>ИНН ${S.inn}</div></div>
  <div class="pad" style="padding-top:6px"><h1>Моё обучение</h1>
@@ -190,11 +199,23 @@ function dashboard(){const st=status(),done=TK.filter(k=>st[k].s==='ok').length,
  ${nx?`<button class="btn" id="cta">${st[nx].s==='exp'?'Повторить':'Пройти'}: ${TYPES[nx].name} →</button>`:'<div class="card" style="text-align:center;font-weight:800">Все виды услуг пройдены 🎉</div>'}
  <div class="common"><span class="cico">${done||TK.some(k=>st[k].s==='exp')?'✓':'○'}</span><div><b>Общие правила и автоматика</b><div class="sub" style="margin:2px 0 0;font-size:13px">${done?'Пройдено в составе инструктажа':'Входит в любой вид услуг'}</div></div></div>
  <div class="dlist">${TK.map(k=>{const x=st[k],[bt,bc]=BADGE[x.s];return`<button class="dcard" data-k="${k}"><img src="img/${TIMG[k]}" alt=""><div class="dc"><span class="badge ${bc}">${bt}</span><b>${TYPES[k].name}</b>
- <small>${x.s==='ok'?`${fmtD(x.r.date)} · ${x.r.score}% · действует до ${fmtD(validTo(x.r))}`:x.s==='exp'?`Срок истёк ${fmtD(validTo(x.r))}`:x.s==='rec'?esc(x.why):TSUB[k]}</small></div><i class="chev">›</i></button>`}).join('')}</div></div>`);
+ <small>${x.s==='ok'?`${fmtD(x.r.date)} · ${x.r.score}% · действует до ${fmtD(validTo(x.r))}`:x.s==='blk'?`Не допущен к оказанию услуг · лучший ${x.a.best}% · обратитесь к координатору`:x.s==='exp'?`Срок истёк ${fmtD(validTo(x.r))}`:x.s==='rec'?esc(x.why):TSUB[k]}</small></div><i class="chev">›</i></button>`}).join('')}</div></div>`);
  $('#bk').onclick=start;nx&&($('#cta').onclick=()=>startType(nx));
- app.querySelectorAll('.dcard').forEach(b=>b.onclick=()=>{const x=st[b.dataset.k];x.s==='ok'?cert(x.r):startType(b.dataset.k)});
+ app.querySelectorAll('.dcard').forEach(b=>b.onclick=()=>{const x=st[b.dataset.k];x.s==='ok'?cert(x.r):x.s==='blk'?blocked(b.dataset.k):startType(b.dataset.k)});
 }
 function recBlock(r){const st=status(r.inn),ks=TK.filter(k=>st[k].s==='rec'||st[k].s==='exp');if(!ks.length)return'';
  return `<div class="noprint"><h2 style="margin:28px 0 12px">Рекомендуем пройти далее</h2>${ks.map(k=>`<button class="dcard" data-go="${k}"><img src="img/${TIMG[k]}" alt=""><div class="dc"><span class="badge ${BADGE[st[k].s][1]}">${BADGE[st[k].s][0]}</span><b>${TYPES[k].name}</b><small>${esc(st[k].why||'Срок действия истёк')}</small></div><i class="chev">›</i></button>`).join('')}</div>`}
 
+
+const PASS=9,MAXA=4,AKEY='ot_pr_attempts';
+function allAtt(){return JSON.parse(localStorage.getItem(AKEY)||'{}')}
+function getAtt(inn,k){return allAtt()[inn+'|'+k]||{n:0,best:0}}
+function setAtt(inn,k,a){const all=allAtt();all[inn+'|'+k]=a;localStorage.setItem(AKEY,JSON.stringify(all))}
+function delAtt(inn,k){const all=allAtt();delete all[inn+'|'+k];localStorage.setItem(AKEY,JSON.stringify(all))}
+function blkCard(a){return `<div class="blk"><div class="bico">⛔</div><b>Не допущен к оказанию услуг</b><p>${esc(a.type)}: использованы все ${MAXA} попытки, лучший результат ${a.best}%.<br><b>Обратитесь к координатору Заказчика.</b></p></div>`}
+function blocked(k){const a=getAtt(S.inn,k);render(`<div class="top"><button class="back" id="bk">←</button></div><div class="pad" style="padding-top:8px">
+ <h1>Доступ<br>закрыт</h1>${blkCard({...a,type:TYPES[k].name})}
+ <div class="card"><div class="grid" style="padding:0"><div><span class="lbl">Исполнитель</span>${esc(a.fio||S.fio)}</div><div><span class="lbl">ИНН</span>${S.inn}</div><div><span class="lbl">Попыток</span>${a.n} из ${MAXA}</div><div><span class="lbl">Лучший результат</span>${a.best}%</div><div class="full"><span class="lbl">Дата</span>${a.date?fmt(a.date):'—'}</div></div></div>
+ <button class="btn ghost" id="todash">Моё обучение</button></div>`);$('#bk').onclick=$('#todash').onclick=dashboard}
 new URLSearchParams(location.search).has('admin')?admin():start();
+function hasHist(){return myRecs().length>0||Object.keys(allAtt()).some(k=>k.startsWith(S.inn+'|'))}

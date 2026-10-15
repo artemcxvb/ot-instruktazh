@@ -160,3 +160,7 @@ input,textarea,select{font-size:16px!important;scroll-margin:120px}
 .chev{font-style:normal;font-size:26px;color:#C2C6CE;padding-right:6px}
 .badge{display:inline-block;font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;letter-spacing:.02em}
 .b-ok{background:#E3F8EE;color:#0B8A57}.b-rec{background:#FFEBDD;color:#E05A00}.b-exp{background:#FFE4E8;color:#D61F40}.b-none{background:#EEF0F3;color:#6E7380}
+
+.left{margin-top:10px;display:inline-block;background:rgba(255,255,255,.22);padding:7px 14px;border-radius:999px;font-weight:800;font-size:14px}
+.blk{background:#FFE4E8;color:#8C1D1F;border-radius:26px;padding:20px;margin:14px 0;text-align:center}.blk .bico{font-size:40px}.blk b{font-size:18px}.blk p{color:#8C1D1F;margin:8px 0 0;line-height:1.45}
+.rst{margin-top:6px;border:0;background:#EEF0F3;border-radius:999px;padding:6px 10px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
