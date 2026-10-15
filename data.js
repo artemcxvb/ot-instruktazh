@@ -1,4 +1,4 @@
-window.AUDIO_V="20261015y";
+window.AUDIO_V="20261015aa";
 const TYPES={
  pick:{name:"Комплектация",icon:"📦"},
  load:{name:"Погрузочно-разгрузочные услуги",icon:"🚚"},
