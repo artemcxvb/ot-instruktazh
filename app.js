@@ -386,44 +386,63 @@ function dashboard(){const st=status(),done=TK.filter(k=>st[k].s==='ok').length,
  <div class="common"><span class="cico">${done||TK.some(k=>st[k].s==='exp')?'✓':'○'}</span><div><b>Общие правила и автоматика</b><div class="sub" style="margin:2px 0 0;font-size:13px">${done?'Пройдено в составе инструктажа':'Входит в любой вид услуг'}</div></div></div>
  <div class="dlist">${TK.map(k=>{const x=st[k],[bt,bc]=BADGE[x.s];return`<button class="dcard" data-k="${k}"><img src="img/${TIMG[k]}" alt=""><div class="dc"><span class="badge ${bc}">${bt}</span><b>${TYPES[k].name}</b>
  <small>${x.s==='ok'?`${fmtD(x.r.date)} · ${x.r.score}% · действует до ${fmtD(validTo(x.r))}`:x.s==='blk'?`Не допущен к оказанию услуг · лучший ${x.a.best}% · обратитесь к координатору`:x.s==='exp'?`Срок истёк ${fmtD(validTo(x.r))}`:x.s==='rec'?esc(x.why):TSUB[k]}</small></div><i class="chev">›</i></button>`}).join('')}</div><button class="btn ghost" id="card">📄 Скачать карточку обучения</button></div>`);
- $('#bk').onclick=start;$('#card').onclick=cardView;nx&&($('#cta').onclick=()=>startType(nx));
+ $('#bk').onclick=start;$('#card').onclick=cardView;if(S.photo)thumbSave(S.photo,S.inn);nx&&($('#cta').onclick=()=>startType(nx));
  app.querySelectorAll('.dcard').forEach(b=>b.onclick=()=>{const x=st[b.dataset.k];x.s==='ok'?cert(x.r):x.s==='blk'?blocked(b.dataset.k):startType(b.dataset.k)});
 }
-function cardCanvas(){const st=status(),W=1080,P=64,now=new Date();
- const pass=TK.filter(k=>st[k].s==='ok'),todo=TK.filter(k=>st[k].s!=='ok');
- const lbl={exp:'Требуется повтор',rec:'Рекомендовано',none:'Не пройдено',blk:'Не допущен'};
- const H=560+pass.length*120+todo.length*120+(pass.length?0:70)+(todo.length?0:70)+40;
+const PKEY='ot_pr_photo';
+function thumbSave(src,inn){if(!src||!inn)return;const im=new Image();im.onload=()=>{const s=240,c=document.createElement('canvas');c.width=c.height=s;const m=Math.min(im.width,im.height);c.getContext('2d').drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,s,s);try{const all=JSON.parse(localStorage.getItem(PKEY)||'{}');all[inn]=c.toDataURL('image/jpeg',.7);localStorage.setItem(PKEY,JSON.stringify(all))}catch(e){}};im.src=src}
+function cardPhoto(){if(S.photo)return S.photo;const r=myRecs().filter(x=>x.photo).sort((a,b)=>a.date<b.date?1:-1)[0];if(r)return r.photo;try{return JSON.parse(localStorage.getItem(PKEY)||'{}')[S.inn]||null}catch(e){return null}}
+function loadImg(src){return new Promise(ok=>{if(!src)return ok(null);const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ok(null);i.src=src})}
+async function cardCanvas(){const st=status(),W=1080,P=56,now=new Date(),ph=await loadImg(cardPhoto());
+ const pass=TK.filter(k=>st[k].s==='ok');
+ const SL={ok:['Пройдено','#16C47F','#E3F8EF'],exp:['Требуется повтор','#FF3B5C','#FFE6EA'],blk:['Не допущен','#FF3B5C','#FFE6EA'],rec:['Рекомендовано','#FF6B00','#FFEEDD'],none:['Не пройдено','#8A8F9C','#EEF0F4']};
+ const rowH=128,H=470+170+110+70+TK.length*rowH+60+150+60;
  const c=document.createElement('canvas'),x=c.getContext('2d');c.width=W;c.height=H;
  const F='Manrope,Inter,-apple-system,"Segoe UI",Roboto,Arial,sans-serif';
  const rr=(X,Y,w,h,r)=>{x.beginPath();x.moveTo(X+r,Y);x.arcTo(X+w,Y,X+w,Y+h,r);x.arcTo(X+w,Y+h,X,Y+h,r);x.arcTo(X,Y+h,X,Y,r);x.arcTo(X,Y,X+w,Y,r);x.closePath()};
  const t=(s,X,Y,sz,w,col,al)=>{x.font=`${w} ${sz}px ${F}`;x.fillStyle=col;x.textAlign=al||'left';x.fillText(s,X,Y)};
- const fit=(s,max,sz,w)=>{x.font=`${w} ${sz}px ${F}`;while(x.measureText(s).width>max&&s.length>3)s=s.slice(0,-2);return s};
- x.fillStyle='#F4F5F8';x.fillRect(0,0,W,H);
- const g=x.createLinearGradient(0,0,W,300);g.addColorStop(0,'#FF6B00');g.addColorStop(1,'#FF2D87');
- x.fillStyle=g;x.fillRect(0,0,W,300);
- t('КАРТОЧКА ОБУЧЕНИЯ',P,96,30,800,'rgba(255,255,255,.85)');
- t(fit(S.fio||'—',W-2*P,58,800),P,170,58,800,'#fff');
- t('ИНН '+(S.inn||'—')+' · исполнитель (самозанятый, ГПХ)',P,222,30,600,'#fff');
- t('ООО «Персональное Решение» · объект «Лемана ПРО»',P,266,28,600,'rgba(255,255,255,.9)');
- let y=340;t('Сформирована '+fmt(now.toISOString()),P,y,26,600,'#6E7380');
- t(pass.length+' из '+TK.length+' видов услуг пройдено',W-P,y,26,800,'#0B0B12','right');y+=70;
- const sec=(title,ks,empty,row)=>{t(title,P,y,36,800,'#0B0B12');y+=30;
-  if(!ks.length){t(empty,P,y+40,26,600,'#6E7380');y+=70;return}
-  ks.forEach(k=>{rr(P,y,W-2*P,100,28);x.fillStyle='#fff';x.fill();row(k);y+=120});y+=30};
- sec('Пройденные инструктажи',pass,'Пока нет пройденных',k=>{const r=st[k].r;
-  x.beginPath();x.arc(P+50,y+50,22,0,7);x.fillStyle='#16C47F';x.fill();t('✓',P+50,y+60,26,800,'#fff','center');
-  t(fit(TYPES[k].name,560,30,800),P+92,y+44,30,800,'#0B0B12');
-  t(fmtD(r.date)+' · действует до '+fmtD(validTo(r)),P+92,y+80,24,600,'#6E7380');
-  t(r.score+'%',W-P-30,y+64,40,800,'#16C47F','right')});
- sec('Рекомендуется пройти',todo,'Все виды услуг пройдены',k=>{const s=st[k];
-  x.beginPath();x.arc(P+50,y+50,22,0,7);x.fillStyle=s.s==='exp'||s.s==='blk'?'#FF3B5C':s.s==='rec'?'#FF6B00':'#C9CCD4';x.fill();
-  t(fit(TYPES[k].name,560,30,800),P+92,y+44,30,800,'#0B0B12');
-  const sub=s.s==='exp'?'Срок истёк '+fmtD(validTo(s.r)):s.s==='blk'?'Обратитесь к координатору':s.s==='rec'?s.why:(TSUB[k]||'');
-  t(fit(sub,560,24,600),P+92,y+80,24,600,'#6E7380');
-  t(lbl[s.s],W-P-30,y+60,24,800,'#6E7380','right')});
- t('Сформировано в приложении инструктажа ООО «Персональное Решение»',W/2,H-60,22,600,'#9A9EA8','center');
+ const fit=(s,max,sz,w)=>{s=String(s);x.font=`${w} ${sz}px ${F}`;if(x.measureText(s).width<=max)return s;while(x.measureText(s+'…').width>max&&s.length>1)s=s.slice(0,-1);return s+'…'};
+ const wrap=(s,X,Y,max,sz,w,col,lh)=>{x.font=`${w} ${sz}px ${F}`;let line='',n=0;s.split(' ').forEach(wd=>{const tt=line?line+' '+wd:wd;if(x.measureText(tt).width>max&&line){t(line,X,Y+n*lh,sz,w,col);n++;line=wd}else line=tt});t(line,X,Y+n*lh,sz,w,col);return(n+1)*lh};
+ const g=x.createLinearGradient(0,0,W,470);g.addColorStop(0,'#FF6B00');g.addColorStop(1,'#FF2D87');
+ x.fillStyle='#F4F5F8';x.fillRect(0,0,W,H);x.fillStyle=g;x.fillRect(0,0,W,470);
+ rr(P,44,64,64,18);x.fillStyle='rgba(255,255,255,.25)';x.fill();t('ПР',P+32,87,26,800,'#fff','center');
+ t('КАРТОЧКА ДОПУСКА / ОБУЧЕНИЯ ПО ОТ',P+84,72,26,800,'#fff');t('ООО «Персональное Решение» · объект «Лемана ПРО»',P+84,102,22,600,'rgba(255,255,255,.9)');
+ const no='ПР-'+String(S.inn).slice(-6)+'-'+now.toISOString().slice(2,10).replace(/-/g,'');
+ // photo
+ const PX=P,PY=150,PS=280;x.save();rr(PX,PY,PS-60,PS,28);x.clip();
+ if(ph){const s=Math.min(ph.width,ph.height*(PS-60)/PS),sh=s*PS/(PS-60);x.drawImage(ph,(ph.width-s)/2,(ph.height-sh)/2,s,sh,PX,PY,PS-60,PS)}
+ else{x.fillStyle='rgba(255,255,255,.22)';x.fillRect(PX,PY,PS-60,PS);x.fillStyle='rgba(255,255,255,.7)';x.beginPath();x.arc(PX+110,PY+105,48,0,7);x.fill();x.beginPath();x.ellipse(PX+110,PY+250,90,80,0,Math.PI,0);x.fill();x.fillStyle='rgba(11,11,18,.45)';x.fillRect(PX,PY+PS-48,PS-60,48);t('фото не найдено',PX+110,PY+PS-17,22,700,'#fff','center')}
+ x.restore();x.lineWidth=5;x.strokeStyle='rgba(255,255,255,.9)';rr(PX,PY,PS-60,PS,28);x.stroke();
+ const TX=PX+PS-20,TW=W-P-TX;let y=PY+30;
+ t('ИСПОЛНИТЕЛЬ',TX,y,20,800,'rgba(255,255,255,.8)');y+=10;
+ x.font=`800 44px ${F}`;y+=wrap(S.fio||'—',TX,y+38,TW,44,800,'#fff',50)+6;
+ t('самозанятый · договор ГПХ',TX,y+8,22,600,'rgba(255,255,255,.85)');y+=52;
+ [['ИНН',S.inn||'—'],['Телефон',S.phone||'—'],['№ карточки',no]].forEach(([a,b])=>{t(a,TX,y,21,600,'rgba(255,255,255,.8)');t(b,TX+170,y,25,800,'#fff');y+=40});
+ // summary block
+ y=500;rr(P,y,W-2*P,150,28);x.fillStyle='#fff';x.fill();
+ t('Пройдено видов услуг',P+30,y+48,24,700,'#6E7380');t(pass.length+' из '+TK.length,W-P-30,y+50,34,800,'#0B0B12','right');
+ rr(P+30,y+76,W-2*P-60,22,11);x.fillStyle='#EEF0F4';x.fill();if(pass.length){rr(P+30,y+76,(W-2*P-60)*pass.length/TK.length,22,11);x.fillStyle=g;x.fill()}
+ t('Сформирована '+fmt(now.toISOString())+' (МСК)',P+30,y+130,21,600,'#8A8F9C');
+ y+=190;t('Виды услуг',P,y,34,800,'#0B0B12');y+=26;
+ const cx=[P+30,P+450,P+700,W-P-30];
+ t('ВИД УСЛУГ / СТАТУС',cx[0],y+20,18,800,'#8A8F9C');t('ДАТА · БАЛЛ',cx[1],y+20,18,800,'#8A8F9C');t('ПОПЫТКИ',cx[2],y+20,18,800,'#8A8F9C','center');t('ДЕЙСТВУЕТ ДО',cx[3],y+20,18,800,'#8A8F9C','right');y+=40;
+ TK.forEach(k=>{const s=st[k],[lb,col,bg]=SL[s.s],r=s.r,srv=(S.srv||{})[k]||{},a=getAtt(S.inn,k);
+  const tries=r&&r.tries?r.tries:srv.attempts||(s.a&&s.a.n)||a.n||0,score=r?r.score+'%':(s.a&&s.a.best)||srv.best?((s.a&&s.a.best)||srv.best)+'%':'—';
+  rr(P,y,W-2*P,rowH-14,24);x.fillStyle='#fff';x.fill();x.fillStyle=col;rr(P,y,10,rowH-14,5);x.fill();
+  t(fit(TYPES[k].name,400,25,800),cx[0],y+44,25,800,'#0B0B12');
+  x.font=`800 19px ${F}`;const bw=x.measureText(lb).width+28;rr(cx[0],y+62,bw,34,17);x.fillStyle=bg;x.fill();t(lb,cx[0]+14,y+86,19,800,col);
+  t(r?fmtD(r.date):'—',cx[1],y+48,24,700,'#0B0B12');t(score,cx[1],y+84,26,800,r?col:'#8A8F9C');
+  t(tries?tries+' / '+MAXA:'—',cx[2],y+64,24,700,'#0B0B12','center');
+  t(r?fmtD(validTo(r)):'—',cx[3],y+64,24,700,s.s==='exp'?'#FF3B5C':'#0B0B12','right');y+=rowH});
+ y+=16;rr(P,y,W-2*P,130,28);x.fillStyle=pass.length?'#E3F8EF':'#FFE6EA';x.fill();
+ t(pass.length?'✓ ДОПУЩЕН К ОКАЗАНИЮ УСЛУГ:':'✕ НЕТ ДЕЙСТВУЮЩЕГО ДОПУСКА',P+30,y+46,22,800,pass.length?'#0E9A62':'#D92D4A');
+ wrap(pass.length?pass.map(k=>TYPES[k].name).join(', '):'Пройдите инструктаж в приложении',P+30,y+86,W-2*P-60,24,700,'#0B0B12',32);
+ y+=170;t('Приложение: artemcxvb.github.io/ot-instruktazh',W/2,y,22,700,'#FF2D87','center');
+ t('Карточка сформирована автоматически по данным инструктажа. Допуск действует 6 месяцев с даты прохождения.',W/2,y+40,18,600,'#9A9EA8','center');
+ t('ООО «Персональное Решение» · '+no,W/2,y+68,18,600,'#9A9EA8','center');
  return c}
-function cardView(){const c=cardCanvas(),url=c.toDataURL('image/png'),fn='Карточка_обучения_'+(S.fio||S.inn).replace(/\s+/g,'_')+'.png';
+async function cardView(){const c=await cardCanvas(),url=c.toDataURL('image/png'),fn='Карточка_обучения_'+(S.fio||S.inn).replace(/\s+/g,'_')+'.png';
+
  const ov=document.createElement('div');ov.id='cardov';ov.innerHTML=`<div class="cvin"><img src="${url}" alt="Карточка обучения"><div class="noprint"><button class="btn" id="cshare">Отправить / сохранить</button><button class="btn ghost" id="cprint">Печать / PDF</button><button class="btn ghost" id="cclose">Закрыть</button></div></div>`;
  document.body.appendChild(ov);document.body.classList.add('pcard');
  const close=()=>{ov.remove();document.body.classList.remove('pcard')};
