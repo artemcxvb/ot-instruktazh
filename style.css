@@ -224,3 +224,4 @@ body.kbopen .hero .in{bottom:48px}
 #cardov .cvin{max-width:520px;margin:0 auto}#cardov img{width:100%;border-radius:22px;display:block;box-shadow:0 20px 50px rgba(0,0,0,.35)}
 @media print{body.pcard>*:not(#cardov){display:none!important}body.pcard #cardov{position:static;background:none;padding:0}body.pcard #cardov img{box-shadow:none;border-radius:0}}
 #cardov .btn.ghost{background:#fff}
+.btn.green{background:#22a55a;color:#fff;font-weight:800;box-shadow:0 12px 28px -8px rgba(34,165,90,.55)}.btn.green:active{background:#1a8547}
