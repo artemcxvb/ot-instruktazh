@@ -173,24 +173,38 @@ function sign(){render(`<div class="top"><button class="back" id="bk">←</butto
  const x=c.getContext('2d');let dr=false,len=0,cssW=0,cssH=0,raf=0,pending=null,lockY=0;
  const lock=()=>{if(document.body.classList.contains('signing'))return;lockY=window.scrollY||document.documentElement.scrollTop||0;document.documentElement.classList.add('signing');document.body.classList.add('signing')};
  const unlock=()=>{if(!document.body.classList.contains('signing'))return;document.documentElement.classList.remove('signing');document.body.classList.remove('signing');window.scrollTo(0,lockY)};
- const styleStroke=()=>{x.setTransform(1,0,0,1,0,0);x.scale(dpr(),dpr());x.lineWidth=2.8;x.lineCap='round';x.lineJoin='round';x.strokeStyle='#0B0B12'};
+ const styleStroke=()=>{x.setTransform(1,0,0,1,0,0);x.scale(dpr(),dpr());x.lineWidth=2.5;x.lineCap='round';x.lineJoin='round';x.strokeStyle='#0B0B12'};
  const fit=(force)=>{if(dr&&!force)return;const r=c.getBoundingClientRect(),w=Math.round(r.width),h=Math.round(r.height);if(!w||!h)return;if(!force&&w===cssW&&h===cssH)return;
   const prev=(cssW&&c.width)?c.toDataURL('image/png'):null;cssW=w;cssH=h;c.width=Math.round(w*dpr());c.height=Math.round(h*dpr());styleStroke();
   if(prev){const img=new Image();img.onload=()=>{x.setTransform(1,0,0,1,0,0);x.drawImage(img,0,0,c.width,c.height);styleStroke()};img.src=prev}};
  fit(true);
  const pt=e=>{const b=c.getBoundingClientRect();return[e.clientX-b.left,e.clientY-b.top]};
- const flush=()=>{raf=0;if(!pending||pending.length<2){pending=null;return}x.beginPath();x.moveTo(pending[0],pending[1]);for(let i=2;i<pending.length;i+=2)x.lineTo(pending[i],pending[i+1]);x.stroke();pending=null};
- const queue=(a,b)=>{if(!pending)pending=[a,b];else{pending.push(a,b)}if(!raf)raf=requestAnimationFrame(flush)};
- const onDown=e=>{if(e.button!=null&&e.button!==0)return;e.preventDefault();dr=true;lock();try{c.setPointerCapture(e.pointerId)}catch(_){}
-  const[a,b]=pt(e);pending=null;if(raf){cancelAnimationFrame(raf);raf=0}x.beginPath();x.moveTo(a,b);queue(a,b);len++;upd()};
- const onMove=e=>{if(!dr)return;e.preventDefault();const[a,b]=pt(e);queue(a,b);len++;upd()};
- const onUp=e=>{if(!dr)return;e&&e.preventDefault&&e.preventDefault();dr=false;if(raf){cancelAnimationFrame(raf);raf=0}flush();unlock();try{e&&e.pointerId!=null&&c.releasePointerCapture(e.pointerId)}catch(_){};upd()};
- c.addEventListener('pointerdown',onDown);c.addEventListener('pointermove',onMove);c.addEventListener('pointerup',onUp);c.addEventListener('pointercancel',onUp);c.addEventListener('lostpointercapture',onUp);
- // iOS Safari: touch listeners must be non-passive to stop page scroll under the finger
- const pe=e=>{e.preventDefault()};c.addEventListener('touchstart',pe,{passive:false});c.addEventListener('touchmove',pe,{passive:false});
+ // Single input path: pointer events (+coalesced); touch fallback only without PointerEvent. lastPt/lastMid persist across rAF batches.
+ let lastPt=null,lastMid=null,pid=null;
+ const seg=(a,b)=>{if(!lastPt){lastPt=[a,b];lastMid=[a,b];x.beginPath();x.arc(a,b,x.lineWidth/2,0,Math.PI*2);x.fillStyle='#0B0B12';x.fill();return}
+  const dx=a-lastPt[0],dy=b-lastPt[1];if(dx*dx+dy*dy<0.25)return;const m=[(lastPt[0]+a)/2,(lastPt[1]+b)/2];
+  x.beginPath();x.moveTo(lastMid[0],lastMid[1]);x.quadraticCurveTo(lastPt[0],lastPt[1],m[0],m[1]);x.stroke();lastPt=[a,b];lastMid=m};
+ const flush=()=>{raf=0;if(!pending)return;const p=pending;pending=null;for(let i=0;i<p.length;i+=2)seg(p[i],p[i+1])};
+ const queue=(a,b)=>{(pending||(pending=[])).push(a,b);if(!raf)raf=requestAnimationFrame(flush)};
+ const endStroke=()=>{if(raf){cancelAnimationFrame(raf);raf=0}flush();if(lastPt&&lastMid){x.beginPath();x.moveTo(lastMid[0],lastMid[1]);x.lineTo(lastPt[0],lastPt[1]);x.stroke()}lastPt=lastMid=null};
+ const start=(a,b)=>{dr=true;lock();if(raf){cancelAnimationFrame(raf);raf=0}pending=null;lastPt=lastMid=null;seg(a,b);len++;upd()};
+ const stop=()=>{if(!dr)return;dr=false;endStroke();pid=null;unlock();upd()};
+ if(window.PointerEvent){
+  c.addEventListener('pointerdown',e=>{if(e.button!=null&&e.button>0)return;if(dr&&pid!==e.pointerId)return;e.preventDefault();pid=e.pointerId;try{c.setPointerCapture(pid)}catch(_){}const[a,b]=pt(e);start(a,b)});
+  c.addEventListener('pointermove',e=>{if(!dr||e.pointerId!==pid)return;e.preventDefault();const evs=(e.getCoalescedEvents&&e.getCoalescedEvents())||[];const list=evs.length?evs:[e];for(const ev of list){const[a,b]=pt(ev);queue(a,b)}len++;upd()});
+  const up=e=>{if(e.pointerId!==pid)return;stop()};
+  c.addEventListener('pointerup',up);c.addEventListener('pointercancel',up);
+  // iOS Safari: non-passive touch listeners only block page scroll; they draw nothing
+  const pe=e=>{if(e.cancelable)e.preventDefault()};c.addEventListener('touchstart',pe,{passive:false});c.addEventListener('touchmove',pe,{passive:false});
+ }else{
+  const tp=e=>pt(e.changedTouches[0]);
+  c.addEventListener('touchstart',e=>{e.preventDefault();const[a,b]=tp(e);start(a,b)},{passive:false});
+  c.addEventListener('touchmove',e=>{e.preventDefault();if(!dr)return;for(const t of e.changedTouches){const[a,b]=pt(t);queue(a,b)}len++;upd()},{passive:false});
+  c.addEventListener('touchend',e=>{e.preventDefault();stop()},{passive:false});c.addEventListener('touchcancel',stop);
+ }
  const onResize=()=>{if(dr)return;fit(false)};addEventListener('resize',onResize);window.visualViewport&&visualViewport.addEventListener('resize',onResize);
  const done=$('#done'),upd=()=>{done.disabled=!($('#agree').checked&&len>10&&S.photo);hint.textContent=len>10?'Подпись принята — можно подписать':(len>0?'Продолжайте расписываться':'Распишитесь пальцем в поле выше')};S.upd=upd;drawSelfie();
- $('#clr').onclick=()=>{if(raf){cancelAnimationFrame(raf);raf=0}pending=null;x.setTransform(1,0,0,1,0,0);x.clearRect(0,0,c.width,c.height);styleStroke();len=0;upd()};$('#agree').onchange=upd;
+ $('#clr').onclick=()=>{if(raf){cancelAnimationFrame(raf);raf=0}pending=null;lastPt=lastMid=null;x.setTransform(1,0,0,1,0,0);x.clearRect(0,0,c.width,c.height);styleStroke();len=0;upd()};$('#agree').onchange=upd;
  done.onclick=()=>{unlock();S.sig=c.toDataURL('image/png');finish()};done.insertAdjacentHTML('afterend','<div class="err" id="serr" style="text-align:center"></div>');
  window.__sigPad={fit,isDrawing:()=>dr,len:()=>len,unlock,cssSize:()=>({w:cssW,h:cssH})};
 }
