@@ -385,10 +385,52 @@ function dashboard(){const st=status(),done=TK.filter(k=>st[k].s==='ok').length,
  ${nx?`<button class="btn" id="cta">${st[nx].s==='exp'?'Повторить':'Пройти'}: ${TYPES[nx].name} →</button>`:'<div class="card" style="text-align:center;font-weight:800">Все виды услуг пройдены 🎉</div>'}
  <div class="common"><span class="cico">${done||TK.some(k=>st[k].s==='exp')?'✓':'○'}</span><div><b>Общие правила и автоматика</b><div class="sub" style="margin:2px 0 0;font-size:13px">${done?'Пройдено в составе инструктажа':'Входит в любой вид услуг'}</div></div></div>
  <div class="dlist">${TK.map(k=>{const x=st[k],[bt,bc]=BADGE[x.s];return`<button class="dcard" data-k="${k}"><img src="img/${TIMG[k]}" alt=""><div class="dc"><span class="badge ${bc}">${bt}</span><b>${TYPES[k].name}</b>
- <small>${x.s==='ok'?`${fmtD(x.r.date)} · ${x.r.score}% · действует до ${fmtD(validTo(x.r))}`:x.s==='blk'?`Не допущен к оказанию услуг · лучший ${x.a.best}% · обратитесь к координатору`:x.s==='exp'?`Срок истёк ${fmtD(validTo(x.r))}`:x.s==='rec'?esc(x.why):TSUB[k]}</small></div><i class="chev">›</i></button>`}).join('')}</div></div>`);
- $('#bk').onclick=start;nx&&($('#cta').onclick=()=>startType(nx));
+ <small>${x.s==='ok'?`${fmtD(x.r.date)} · ${x.r.score}% · действует до ${fmtD(validTo(x.r))}`:x.s==='blk'?`Не допущен к оказанию услуг · лучший ${x.a.best}% · обратитесь к координатору`:x.s==='exp'?`Срок истёк ${fmtD(validTo(x.r))}`:x.s==='rec'?esc(x.why):TSUB[k]}</small></div><i class="chev">›</i></button>`}).join('')}</div><button class="btn ghost" id="card">📄 Скачать карточку обучения</button></div>`);
+ $('#bk').onclick=start;$('#card').onclick=cardView;nx&&($('#cta').onclick=()=>startType(nx));
  app.querySelectorAll('.dcard').forEach(b=>b.onclick=()=>{const x=st[b.dataset.k];x.s==='ok'?cert(x.r):x.s==='blk'?blocked(b.dataset.k):startType(b.dataset.k)});
 }
+function cardCanvas(){const st=status(),W=1080,P=64,now=new Date();
+ const pass=TK.filter(k=>st[k].s==='ok'),todo=TK.filter(k=>st[k].s!=='ok');
+ const lbl={exp:'Требуется повтор',rec:'Рекомендовано',none:'Не пройдено',blk:'Не допущен'};
+ const H=560+pass.length*120+todo.length*120+(pass.length?0:70)+(todo.length?0:70)+40;
+ const c=document.createElement('canvas'),x=c.getContext('2d');c.width=W;c.height=H;
+ const F='Manrope,Inter,-apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+ const rr=(X,Y,w,h,r)=>{x.beginPath();x.moveTo(X+r,Y);x.arcTo(X+w,Y,X+w,Y+h,r);x.arcTo(X+w,Y+h,X,Y+h,r);x.arcTo(X,Y+h,X,Y,r);x.arcTo(X,Y,X+w,Y,r);x.closePath()};
+ const t=(s,X,Y,sz,w,col,al)=>{x.font=`${w} ${sz}px ${F}`;x.fillStyle=col;x.textAlign=al||'left';x.fillText(s,X,Y)};
+ const fit=(s,max,sz,w)=>{x.font=`${w} ${sz}px ${F}`;while(x.measureText(s).width>max&&s.length>3)s=s.slice(0,-2);return s};
+ x.fillStyle='#F4F5F8';x.fillRect(0,0,W,H);
+ const g=x.createLinearGradient(0,0,W,300);g.addColorStop(0,'#FF6B00');g.addColorStop(1,'#FF2D87');
+ x.fillStyle=g;x.fillRect(0,0,W,300);
+ t('КАРТОЧКА ОБУЧЕНИЯ',P,96,30,800,'rgba(255,255,255,.85)');
+ t(fit(S.fio||'—',W-2*P,58,800),P,170,58,800,'#fff');
+ t('ИНН '+(S.inn||'—')+' · исполнитель (самозанятый, ГПХ)',P,222,30,600,'#fff');
+ t('ООО «Персональное Решение» · объект «Лемана ПРО»',P,266,28,600,'rgba(255,255,255,.9)');
+ let y=340;t('Сформирована '+fmt(now.toISOString()),P,y,26,600,'#6E7380');
+ t(pass.length+' из '+TK.length+' видов услуг пройдено',W-P,y,26,800,'#0B0B12','right');y+=70;
+ const sec=(title,ks,empty,row)=>{t(title,P,y,36,800,'#0B0B12');y+=30;
+  if(!ks.length){t(empty,P,y+40,26,600,'#6E7380');y+=70;return}
+  ks.forEach(k=>{rr(P,y,W-2*P,100,28);x.fillStyle='#fff';x.fill();row(k);y+=120});y+=30};
+ sec('Пройденные инструктажи',pass,'Пока нет пройденных',k=>{const r=st[k].r;
+  x.beginPath();x.arc(P+50,y+50,22,0,7);x.fillStyle='#16C47F';x.fill();t('✓',P+50,y+60,26,800,'#fff','center');
+  t(fit(TYPES[k].name,560,30,800),P+92,y+44,30,800,'#0B0B12');
+  t(fmtD(r.date)+' · действует до '+fmtD(validTo(r)),P+92,y+80,24,600,'#6E7380');
+  t(r.score+'%',W-P-30,y+64,40,800,'#16C47F','right')});
+ sec('Рекомендуется пройти',todo,'Все виды услуг пройдены',k=>{const s=st[k];
+  x.beginPath();x.arc(P+50,y+50,22,0,7);x.fillStyle=s.s==='exp'||s.s==='blk'?'#FF3B5C':s.s==='rec'?'#FF6B00':'#C9CCD4';x.fill();
+  t(fit(TYPES[k].name,560,30,800),P+92,y+44,30,800,'#0B0B12');
+  const sub=s.s==='exp'?'Срок истёк '+fmtD(validTo(s.r)):s.s==='blk'?'Обратитесь к координатору':s.s==='rec'?s.why:(TSUB[k]||'');
+  t(fit(sub,560,24,600),P+92,y+80,24,600,'#6E7380');
+  t(lbl[s.s],W-P-30,y+60,24,800,'#6E7380','right')});
+ t('Сформировано в приложении инструктажа ООО «Персональное Решение»',W/2,H-60,22,600,'#9A9EA8','center');
+ return c}
+function cardView(){const c=cardCanvas(),url=c.toDataURL('image/png'),fn='Карточка_обучения_'+(S.fio||S.inn).replace(/\s+/g,'_')+'.png';
+ const ov=document.createElement('div');ov.id='cardov';ov.innerHTML=`<div class="cvin"><img src="${url}" alt="Карточка обучения"><div class="noprint"><button class="btn" id="cshare">Отправить / сохранить</button><button class="btn ghost" id="cprint">Печать / PDF</button><button class="btn ghost" id="cclose">Закрыть</button></div></div>`;
+ document.body.appendChild(ov);document.body.classList.add('pcard');
+ const close=()=>{ov.remove();document.body.classList.remove('pcard')};
+ const dl=()=>{const a=document.createElement('a');a.href=url;a.download=fn;document.body.appendChild(a);a.click();a.remove()};
+ $('#cclose').onclick=close;$('#cprint').onclick=()=>window.print();
+ $('#cshare').onclick=()=>c.toBlob(b=>{try{const f=new File([b],fn,{type:'image/png'});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f],title:'Карточка обучения',text:'Карточка обучения: '+S.fio}).catch(e=>{if(e&&e.name!=='AbortError')dl()});return}}catch(e){}dl()},'image/png')}
 function recBlock(r){const st=status(r.inn),ks=TK.filter(k=>st[k].s==='rec'||st[k].s==='exp');if(!ks.length)return'';
  return `<div class="noprint"><h2 style="margin:28px 0 12px">Рекомендуем пройти далее</h2>${ks.map(k=>`<button class="dcard" data-go="${k}"><img src="img/${TIMG[k]}" alt=""><div class="dc"><span class="badge ${BADGE[st[k].s][1]}">${BADGE[st[k].s][0]}</span><b>${TYPES[k].name}</b><small>${esc(st[k].why||'Срок действия истёк')}</small></div><i class="chev">›</i></button>`).join('')}</div>`}
 
