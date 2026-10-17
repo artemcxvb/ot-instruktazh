@@ -217,6 +217,8 @@ body.kbopen .hero .in{bottom:48px}
 .vbub circle{fill:none;stroke-width:3.2}.vr0{stroke:rgba(255,255,255,.35)}.vr1{stroke:#FF6B00;stroke-dasharray:100;stroke-dashoffset:100;stroke-linecap:round;transition:stroke-dashoffset .25s linear}
 .vplay{position:absolute;right:2px;bottom:2px;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#FF6B00,#FF2D87);color:#fff;font-style:normal;font-size:12px;line-height:28px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.4)}
 .vbub.playing .vplay{display:none}
+.vsnd{display:none;position:absolute;left:50%;bottom:-14px;transform:translateX(-50%);white-space:nowrap;font-size:11px;font-weight:700;line-height:1;padding:6px 9px;border-radius:999px;background:linear-gradient(90deg,#FF6B00,#FF2D87);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.45);z-index:2;cursor:pointer}
+.vbub.muted .vsnd{display:block}
 @media (max-height:600px){.vbub{top:calc(58px + env(safe-area-inset-top));width:92px;height:92px}.vbub video{width:82px;height:82px}}
 .story.hasvid .slrow{padding-right:112px;justify-content:flex-start}.story.hasvid .stitle{padding-right:112px}
 @media (max-height:600px){.story.hasvid .slrow,.story.hasvid .stitle{padding-right:96px}}

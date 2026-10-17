@@ -1,19 +1,36 @@
 /* ---- Автовоспроизведение видео-кружка ---- */
 function ttsAuto(){return localStorage.getItem('ot_autotts')==='1'}
 
-/* ---- Видео-кружок (говорящая голова) ---- */
-var VID={v:null,b:null};
-function vidStop(){const v=VID.v;if(v){try{v.pause()}catch(e){}}VID.v=null;VID.b=null}
-function vidHTML(s){const q='?v='+(window.AUDIO_V||1);return `<button class="vbub" type="button" aria-label="Видео инструктора"><video playsinline webkit-playsinline preload="metadata" ${s.poster?`poster="${s.poster+q}"`:''} src="${s.video+q}"></video><svg viewBox="0 0 100 100"><circle class="vr0" cx="50" cy="50" r="48"/><circle class="vr1" cx="50" cy="50" r="48" pathLength="100"/></svg><i class="vplay">▶</i></button>`}
-function vidBind(b){const v=b.querySelector('video'),r=b.querySelector('.vr1');VID.v=v;VID.b=b;
- const ui=()=>b.classList.toggle('playing',!v.paused&&!v.ended);
- v.onplay=v.onpause=v.onended=ui;v.onended=()=>{ui();b.classList.add('ended')};
+/* ---- Видео-кружок (говорящая голова): автозапуск со звуком при открытии слайда ---- */
+// Один постоянный <video>: после первого запуска в жесте пользователя iOS/Chrome разрешают ему звук и дальше.
+var VID={v:null,b:null,el:null,unlocked:false};
+function vidEl(){if(!VID.el){const v=document.createElement('video');v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');v.playsInline=true;v.preload='auto';VID.el=v}return VID.el}
+function vidStop(){const v=VID.el;if(v){try{v.pause()}catch(e){}v.onplay=v.onpause=v.onended=v.ontimeupdate=null}VID.v=null;VID.b=null}
+// Разблокировка медиа — вызывать синхронно внутри обработчика нажатия (кнопка старта блока).
+function vidPrime(){if(VID.unlocked||VID.v)return;const v=vidEl();try{if(!v.src){const f=[...COMMON_BEFORE,...COMMON_AFTER].find(x=>x.video);if(f)v.src=new URL(f.video+'?v='+(window.AUDIO_V||1),location.href).href}
+ v.muted=false;const p=v.play();p&&p.catch&&p.catch(()=>{});v.pause();VID.primed=true}catch(e){}}
+// Первое нажатие в приложении (кнопка «Начать» и т.п.) разблокирует медиа.
+document.addEventListener('click',function pr(){vidPrime();if(VID.primed)document.removeEventListener('click',pr,true)},true);
+function vidHTML(s){const q='?v='+(window.AUDIO_V||1);return `<button class="vbub" type="button" aria-label="Видео инструктора" data-src="${s.video+q}" data-poster="${s.poster?s.poster+q:''}"><span class="vslot"></span><svg viewBox="0 0 100 100"><circle class="vr0" cx="50" cy="50" r="48"/><circle class="vr1" cx="50" cy="50" r="48" pathLength="100"/></svg><i class="vplay">▶</i><span class="vsnd" role="button">🔊 Включить звук</span></button>`}
+function vidBind(b){const v=vidEl(),r=b.querySelector('.vr1'),snd=b.querySelector('.vsnd');
+ try{v.pause()}catch(e){}
+ b.querySelector('.vslot').replaceWith(v);
+ if(b.dataset.poster)v.poster=b.dataset.poster;else v.removeAttribute('poster');
+ const src=new URL(b.dataset.src,location.href).href;if(v.src!==src)v.src=src;
+ try{v.currentTime=0}catch(e){}
+ VID.v=v;VID.b=b;
+ const ui=()=>{b.classList.toggle('playing',!v.paused&&!v.ended);b.classList.toggle('muted',v.muted&&!v.paused)};
+ v.onplay=v.onpause=ui;v.onended=()=>{ui();b.classList.add('ended')};
  v.ontimeupdate=()=>{if(v.duration)r.style.strokeDashoffset=100-100*v.currentTime/v.duration};
- const play=()=>{b.classList.remove('ended');if(v.ended)v.currentTime=0;const p=v.play();p&&p.catch&&p.catch(()=>ui())};
- b.onclick=e=>{e.stopPropagation();if(v.paused||v.ended)play();else v.pause()};
+ r.style.strokeDashoffset=100;
+ const play=(muted)=>{b.classList.remove('ended');if(v.ended)v.currentTime=0;v.muted=!!muted;let p;try{p=v.play()}catch(e){p=Promise.reject(e)}
+  if(p&&p.then)p.then(()=>{if(!v.muted)VID.unlocked=true;ui()}).catch(e=>{if(VID.v!==v)return;
+   if(!muted&&e&&e.name==='NotAllowedError')play(true);else ui()});ui()};
+ snd.onclick=e=>{e.stopPropagation();v.muted=false;if(v.paused)play(false);else{VID.unlocked=true;ui()}};
+ b.onclick=e=>{e.stopPropagation();if(v.muted&&!v.paused){v.muted=false;VID.unlocked=true;ui();return}if(v.paused||v.ended)play(false);else v.pause()};
  b.addEventListener('pointerdown',e=>e.stopPropagation());
- const t=b.parentNode.querySelector('.ttsauto');if(t){t.classList.toggle('on',ttsAuto());t.onclick=e=>{e.stopPropagation();const x=!ttsAuto();localStorage.setItem('ot_autotts',x?'1':'0');t.classList.toggle('on',x);if(x&&v.paused)play()}}
- if(ttsAuto())play()}
+ play(false)}
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&VID.el)try{VID.el.pause()}catch(e){}});
 // ===== Backend (Google Apps Script). Пусто = локальный режим без сервера.
 const API_URL=window.OT_API_URL||'https://script.google.com/macros/s/AKfycbxVl-Yb2Heq_QPYGp0QUdRsK7LQVHps0avgdT4_oIbReGW73D4B-PLASC6dZozi7w5p/exec';
 const API_TOKEN='gBU-Yj7L-7h_2zGd2EXgr9Qy';
@@ -122,7 +139,7 @@ function slide(dir=1){clearTimeout(timer);const s=S.slides[S.i],n=S.slides.lengt
  <div class="segs">${S.slides.map((_,j)=>`<span class="${j<S.i||(j===S.i&&read)?'done':j===S.i?'cur':''}" style="--dur:${READ}s"><i></i></span>`).join('')}</div>
  <div class="shead">${BRAND}<button class="x" id="cls" aria-label="К выбору">✕</button></div>
  <div class="tap l" id="tl"></div><div class="tap r" id="tr"></div>${s.video?vidHTML(s):''}
- <div class="scontent"><div class="slrow"><span class="slbl">${S.i+1}/${n} · ${esc(s.sec)}</span>${s.video?'<span class="ttsbar"><button class="ttsauto" type="button" title="Автовоспроизведение">Авто</button></span>':''}</div><h2 class="stitle${s.pts.length+s.no.length+s.ok.length>7?' sm':''}">${esc(s.title)}</h2>
+ <div class="scontent"><div class="slrow"><span class="slbl">${S.i+1}/${n} · ${esc(s.sec)}</span></div><h2 class="stitle${s.pts.length+s.no.length+s.ok.length>7?' sm':''}">${esc(s.title)}</h2>
  <div class="sheet"><div class="chiprow">${chips(s.no,'no','ЗАПРЕЩЕНО','✕')}${chips(s.ok,'ok','ПРАВИЛЬНО','✓')}</div><ul>${s.pts.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>
  <div class="row"><button class="btn glass" id="prev">←</button><button class="btn" id="next" ${read?'':'disabled'}>${read?(S.i<n-1?'Далее →':'К тесту →'):'Читаем…'}</button></div>
  <div class="hint">Свайп ← → или тап по краям фото</div></div></div>`,'');
@@ -375,7 +392,7 @@ function status(inn=S.inn){const recs=myRecs(inn),now=new Date(),st={};
  TK.forEach(k=>{if(st[k]&&st[k].s==='ok')(REC[k]||[]).forEach(([t,why])=>{if(!st[t])st[t]={s:'rec',why}})});
  TK.forEach(k=>{if(!st[k])st[k]={s:'none'}});return st}
 function nextRec(st){return TK.find(k=>st[k].s==='exp')||TK.find(k=>st[k].s==='rec')||TK.find(k=>st[k].s==='none')}
-function startType(k){if(getAtt(S.inn,k).blocked){S.type=k;blocked(k);return}S.type=k;S.slides=[...COMMON_BEFORE,...SPECIFIC[k],...COMMON_AFTER];S.i=0;S.maxRead=-1;S.photo=null;S.photoAt=null;S.sig=null;S.face=null;S.recId=null;S.tries=getAtt(S.inn,k).n;slide()}
+function startType(k){if(getAtt(S.inn,k).blocked){S.type=k;blocked(k);return}S.type=k;S.slides=[...COMMON_BEFORE,...SPECIFIC[k],...COMMON_AFTER];S.i=0;S.maxRead=-1;S.photo=null;S.photoAt=null;S.sig=null;S.face=null;S.recId=null;S.tries=getAtt(S.inn,k).n;vidPrime();slide()}
 const BADGE={blk:['Не допущен','b-exp'],ok:['Пройдено ✓','b-ok'],rec:['Рекомендовано','b-rec'],exp:['Требуется повтор','b-exp'],none:['Не пройдено','b-none']};
 function dashboard(){const st=status(),done=TK.filter(k=>st[k].s==='ok').length,nx=nextRec(st),C=2*Math.PI*44;
  render(`<div class="top"><button class="back" id="bk">←</button><div style="margin-left:auto;font-weight:700;color:var(--m);font-size:13px;text-align:right">${esc(S.fio)}<br>ИНН ${S.inn}</div></div>
